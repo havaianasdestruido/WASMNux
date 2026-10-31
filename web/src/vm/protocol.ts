@@ -37,7 +37,12 @@ export type WorkerEvent =
   | { readonly type: "ready"; readonly coreVersion: string }
   | { readonly type: "wasmUnavailable"; readonly reason: string }
   | { readonly type: "booted"; readonly requestId: number; readonly state: MachineStateName }
-  | { readonly type: "state"; readonly state: MachineStateName; readonly reason?: string }
+  | {
+      readonly type: "state";
+      readonly state: MachineStateName;
+      readonly requestId?: number;
+      readonly reason?: string;
+    }
   | { readonly type: "serialOutput"; readonly bytes: Uint8Array }
   | {
       readonly type: "framebuffer";
@@ -164,6 +169,9 @@ export function parseWorkerEvent(value: unknown): WorkerEvent {
       const event: Extract<WorkerEvent, { type: "state" }> = {
         type: "state",
         state: reqState(value["state"]),
+        ...(value["requestId"] !== undefined
+          ? { requestId: reqNumber(value, "requestId") }
+          : {}),
         ...(value["reason"] !== undefined ? { reason: reqString(value, "reason") } : {}),
       };
       return event;

@@ -60,7 +60,7 @@ impl VecBlockBackend {
     /// # Errors
     /// [`VmError::InvalidConfig`] if the image is empty or not sector-aligned.
     pub fn from_bytes(data: Vec<u8>) -> Result<Self> {
-        if data.is_empty() || data.len() % SECTOR_SIZE != 0 {
+        if data.is_empty() || !data.len().is_multiple_of(SECTOR_SIZE) {
             return Err(VmError::InvalidConfig(format!(
                 "disk image size {} is empty or not a multiple of {SECTOR_SIZE}",
                 data.len()

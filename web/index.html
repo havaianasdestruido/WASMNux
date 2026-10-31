@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="WASMNux: a real RISC-V virtual machine in WebAssembly booting genuine Linux (Vanilla BusyBox and Debian) with persistent browser storage."
+    />
+    <meta name="theme-color" content="#0b0f14" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+    <title>WASMNux — Linux in WebAssembly</title>
+  </head>
+  <body>
+    <header class="app-header">
+      <div>
+        <h1>WASMNux</h1>
+        <p class="subtitle">
+          A real RISC-V&nbsp;64 virtual machine, compiled from Rust to WebAssembly, booting an
+          unmodified Linux kernel. Not a terminal simulator: every byte below comes from the
+          guest&rsquo;s UART.
+        </p>
+      </div>
+      <div class="header-status">
+        <div>WASM core: <strong id="wasm-state">loading…</strong></div>
+        <div>VM: <strong id="vm-state">created</strong></div>
+        <div id="vm-stats" class="mono small"></div>
+      </div>
+    </header>
+
+    <main class="layout">
+      <section class="panel controls-panel" aria-label="Profiles and virtual machine controls">
+        <h2>Linux profile</h2>
+        <div id="profile-cards" class="profile-cards"></div>
+        <p id="asset-detail" class="small note"></p>
+
+        <h2>Virtual machine</h2>
+        <div class="button-row">
+          <button id="btn-boot" type="button">▶ Boot</button>
+          <button id="btn-pause" type="button" disabled>⏸ Pause</button>
+          <button id="btn-resume" type="button" disabled>⏵ Resume</button>
+          <button id="btn-poweroff" type="button" disabled>⏻ Power off</button>
+        </div>
+        <ul id="boot-reasons" class="reasons"></ul>
+
+        <h2>Virtual disk <span class="small">(persistent, per profile)</span></h2>
+        <div id="disk-info" class="mono small">—</div>
+        <div class="button-row">
+          <input id="snapshot-name" type="text" placeholder="snapshot name" aria-label="Snapshot name" />
+          <button id="btn-snapshot" type="button">Snapshot</button>
+        </div>
+        <div class="button-row">
+          <select id="snapshot-list" aria-label="Snapshots"></select>
+          <button id="btn-restore" type="button">Restore</button>
+          <button id="btn-delete-snapshot" type="button">Delete</button>
+        </div>
+        <div class="button-row">
+          <button id="btn-export-disk" type="button">⬇ Export disk</button>
+          <label class="file-label">
+            ⬆ Import disk
+            <input id="import-disk-file" type="file" accept=".img,application/octet-stream" hidden />
+          </label>
+          <button id="btn-reset-disk" type="button" class="danger">Reset disk…</button>
+        </div>
+
+        <h2>Browser storage</h2>
+        <div id="storage-info" class="small">—</div>
+        <div class="button-row">
+          <button id="btn-request-persist" type="button">Request persistent storage</button>
+        </div>
+        <p class="small note">
+          Browser storage can still be evicted under storage pressure even when persistence is
+          granted. Export disks you cannot afford to lose.
+        </p>
+      </section>
+
+      <section class="panel terminal-panel" aria-label="Guest terminal and display">
+        <div class="panel-head">
+          <h2>Guest console <span class="small">(UART: real guest I/O)</span></h2>
+          <button id="btn-clear-terminal" type="button">Clear</button>
+        </div>
+        <div id="terminal" class="terminal"></div>
+
+        <div class="panel-head">
+          <h2>Guest framebuffer</h2>
+          <span id="renderer-badge" class="badge">renderer: …</span>
+        </div>
+        <canvas id="framebuffer" width="1024" height="600"></canvas>
+        <div class="button-row">
+          <button id="btn-test-pattern" type="button">
+            Renderer self-test pattern <span class="small">(not guest output)</span>
+          </button>
+        </div>
+        <p id="framebuffer-status" class="small note">No guest framebuffer frames yet.</p>
+      </section>
+
+      <section class="panel side-panel" aria-label="Capabilities and diagnostics">
+        <h2>Browser capabilities</h2>
+        <table id="capabilities" class="caps"></table>
+
+        <h2>Diagnostics</h2>
+        <ol id="diagnostics" class="diagnostics"></ol>
+
+        <h2>Honest limitations</h2>
+        <ul class="small">
+          <li>The CPU implements RV64IMAC today; Debian&rsquo;s <code>lp64d</code> userspace also needs the F/D floating-point milestone (tracked in TODO.MD) before the Debian profile can run real userspace.</li>
+          <li>WebGPU accelerates framebuffer <em>presentation</em> only — it is not guest GPU passthrough and does not speed up the emulated CPU.</li>
+          <li>Guest networking needs a WebSocket relay (browsers expose no raw TCP/UDP). Without one, the guest is offline; <code>apt</code> network operations require the relay from Phase 9.</li>
+          <li>Guest assets (kernel, firmware, rootfs) are built by the pipeline in <code>guest/</code> and served from <code>/guest/…</code>. The Boot button stays disabled until real assets are present.</li>
+        </ul>
+      </section>
+    </main>
+
+    <footer class="app-footer small">
+      WASMNux is Apache-2.0. Architecture &amp; test evidence live in the repository
+      (<code>docs/ARCHITECTURE.md</code>, <code>docs/TEST-REPORT.md</code>, <code>TODO.MD</code>).
+    </footer>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

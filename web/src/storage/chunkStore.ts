@@ -139,7 +139,12 @@ export class OpfsChunkStore implements ChunkStore {
   async list(prefix: string): Promise<string[]> {
     const results: string[] = [];
     const walk = async (dir: FileSystemDirectoryHandle, path: string): Promise<void> => {
-      for await (const entry of dir.values()) {
+      // values() is part of the OPFS spec; this cast covers the installed
+      // DOM+WebWorker lib combination, which types it incompletely.
+      const entries = (
+        dir as unknown as { values(): AsyncIterable<FileSystemHandle> }
+      ).values();
+      for await (const entry of entries) {
         const childPath = path === "" ? entry.name : `${path}/${entry.name}`;
         if (entry.kind === "file") {
           if (childPath.startsWith(prefix)) {

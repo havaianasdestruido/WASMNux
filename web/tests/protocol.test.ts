@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 
 import { generateTestPattern, swizzleXrgbToRgba } from "../src/gpu/renderer.js";
-import { parseGuestAssetsState } from "../src/assets.js";
 import { probeGuestAssets } from "../src/assets.js";
 import { PROFILES } from "../src/profiles.js";
 import { parseWorkerEvent, parseWorkerRequest } from "../src/vm/protocol.js";

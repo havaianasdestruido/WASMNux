@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="WASMNux">
+  <rect x="2" y="6" width="60" height="44" rx="6" fill="#0b0f14" stroke="#7ee787" stroke-width="3"/>
+  <path d="M14 20 L24 28 L14 36" fill="none" stroke="#7ee787" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="28" y="33" width="16" height="4" rx="2" fill="#7ee787"/>
+  <rect x="24" y="54" width="16" height="4" rx="2" fill="#7ee787"/>
+</svg>

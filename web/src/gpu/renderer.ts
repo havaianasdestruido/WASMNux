@@ -112,8 +112,8 @@ export class Canvas2dRenderer implements FramebufferRenderer {
       this.#canvas.width = frame.width;
       this.#canvas.height = frame.height;
     }
-    const rgba = swizzleXrgbToRgba(frame);
-    const image = new ImageData(rgba, frame.width, frame.height);
+    const image = this.#ctx.createImageData(frame.width, frame.height);
+    swizzleXrgbToRgba(frame, image.data);
     if (this.#scratch === undefined) {
       this.#scratch = document.createElement("canvas");
     }
