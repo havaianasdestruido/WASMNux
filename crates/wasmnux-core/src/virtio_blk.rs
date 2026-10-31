@@ -400,16 +400,20 @@ mod tests {
         let mut dev = VirtioBlock::new(backend);
         dev.write(0x30, 4, 0).expect("queue sel");
         dev.write(0x38, 4, 8).expect("queue num");
-        dev.write(0x40, 4, (QUEUE_PAGE / 4096) as u64).expect("queue pfn");
+        dev.write(0x40, 4, (QUEUE_PAGE / 4096) as u64)
+            .expect("queue pfn");
         (ram, dev)
     }
 
     fn put_desc(ram: &mut Ram, idx: u64, addr: u64, len: u32, flags: u16, next: u16) {
         let base = QUEUE_PAGE + idx * 16;
         ram.write_int(base, 8, addr).expect("desc addr");
-        ram.write_int(base + 8, 4, u64::from(len)).expect("desc len");
-        ram.write_int(base + 12, 2, u64::from(flags)).expect("desc flags");
-        ram.write_int(base + 14, 2, u64::from(next)).expect("desc next");
+        ram.write_int(base + 8, 4, u64::from(len))
+            .expect("desc len");
+        ram.write_int(base + 12, 2, u64::from(flags))
+            .expect("desc flags");
+        ram.write_int(base + 14, 2, u64::from(next))
+            .expect("desc next");
     }
 
     fn post_request(ram: &mut Ram, req_type: u64, sector: u64, data_len: u32) {
@@ -452,7 +456,8 @@ mod tests {
         assert_eq!(check, payload);
 
         // Read it back into a different guest buffer state.
-        ram.write(DATA, &[0_u8; SECTOR_SIZE]).expect("clear guest buf");
+        ram.write(DATA, &[0_u8; SECTOR_SIZE])
+            .expect("clear guest buf");
         post_request(&mut ram, 0, 3, SECTOR_SIZE as u32);
         assert_eq!(dev.process_queue(&mut ram), 1);
         let mut back = [0_u8; SECTOR_SIZE];

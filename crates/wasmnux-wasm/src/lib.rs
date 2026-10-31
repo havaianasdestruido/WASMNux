@@ -3,9 +3,7 @@
 //! silent fallbacks into fake behaviour.
 
 use wasm_bindgen::prelude::{wasm_bindgen, JsValue};
-use wasmnux_core::{
-    BootMode, Machine as CoreMachine, MachineConfig, RunReason, VmError,
-};
+use wasmnux_core::{BootMode, Machine as CoreMachine, MachineConfig, RunReason, VmError};
 
 fn to_js_error(error: VmError) -> JsValue {
     JsValue::from_str(&error.to_string())

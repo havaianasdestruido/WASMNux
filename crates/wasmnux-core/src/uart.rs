@@ -240,7 +240,11 @@ mod tests {
         assert_eq!(uart.take_output(), b"Hi".to_vec());
 
         assert!(uart.host_write(b"x"));
-        assert_eq!(uart.read(5, 1).expect("lsr") & 1, 1, "data-ready must be set");
+        assert_eq!(
+            uart.read(5, 1).expect("lsr") & 1,
+            1,
+            "data-ready must be set"
+        );
         assert_eq!(uart.read(0, 1).expect("rbr"), u64::from(b'x'));
         assert_eq!(uart.read(5, 1).expect("lsr") & 1, 0);
     }
@@ -253,7 +257,11 @@ mod tests {
         uart.write(1, 1, 0x00).expect("dlm");
         assert_eq!(uart.read(0, 1).expect("dll read"), 0x0C);
         uart.write(3, 1, 0x03).expect("clear DLAB, 8n1");
-        assert_eq!(uart.output_len(), 0, "DLAB writes must not emit UART output");
+        assert_eq!(
+            uart.output_len(),
+            0,
+            "DLAB writes must not emit UART output"
+        );
     }
 
     #[test]

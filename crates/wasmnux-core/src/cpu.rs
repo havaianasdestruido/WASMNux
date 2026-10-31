@@ -58,8 +58,6 @@ const MIP_STIP: u64 = 1 << 5;
 const MIP_MTIP: u64 = 1 << 7;
 const MIP_SEIP: u64 = 1 << 9;
 const MIP_MEIP: u64 = 1 << 11;
-/// Interrupt bits driven by devices (read-only from the guest's view).
-const MIP_EXTERNAL_MASK: u64 = MIP_MSIP | MIP_MTIP | MIP_MEIP;
 const MIP_WRITABLE_MASK: u64 = MIP_SSIP | MIP_STIP | MIP_SEIP;
 const MIE_MASK: u64 = MIP_SSIP | MIP_MSIP | MIP_STIP | MIP_MTIP | MIP_SEIP | MIP_MEIP;
 const SIE_MASK: u64 = MIP_SSIP | MIP_STIP | MIP_SEIP;
@@ -340,8 +338,7 @@ impl Cpu {
             CSR_MISA | 0xF11 | 0xF12 | 0xF13 | 0xF14 | 0x310 => { /* read-only in practice */ }
             CSR_SSTATUS => {
                 let current = self.mstatus();
-                self.csr[CSR_MSTATUS as usize] =
-                    (current & !SSTATUS_MASK) | (value & SSTATUS_MASK);
+                self.csr[CSR_MSTATUS as usize] = (current & !SSTATUS_MASK) | (value & SSTATUS_MASK);
             }
             CSR_SIE => {
                 let current = self.csr[CSR_MIE as usize];
@@ -357,8 +354,7 @@ impl Cpu {
             }
             CSR_MIP => {
                 self.csr[CSR_MIP as usize] =
-                    (self.csr[CSR_MIP as usize] & !MIP_WRITABLE_MASK)
-                        | (value & MIP_WRITABLE_MASK);
+                    (self.csr[CSR_MIP as usize] & !MIP_WRITABLE_MASK) | (value & MIP_WRITABLE_MASK);
             }
             CSR_MIE => self.csr[CSR_MIE as usize] = value & MIE_MASK,
             CSR_MIDELEG => self.csr[CSR_MIDELEG as usize] = value & SIE_MASK,
@@ -627,7 +623,14 @@ impl Cpu {
             }
         }
         if let Some((code, to_supervisor)) = self.pending_interrupt() {
-            self.deliver_trap(Trap { cause: code, tval: 0 }, true, to_supervisor);
+            self.deliver_trap(
+                Trap {
+                    cause: code,
+                    tval: 0,
+                },
+                true,
+                to_supervisor,
+            );
             return StepOutcome::Executed;
         }
 
@@ -824,21 +827,9 @@ impl Cpu {
                     (1, 0b010) => (((a as i64 as i128) * (b as u128 as i128)) >> 64) as u64,
                     (1, 0b011) => (((a as u128) * (b as u128)) >> 64) as u64,
                     (1, 0b100) => div_signed(a, b),
-                    (1, 0b101) => {
-                        if b == 0 {
-                            u64::MAX
-                        } else {
-                            a / b
-                        }
-                    }
+                    (1, 0b101) => a.checked_div(b).unwrap_or(u64::MAX),
                     (1, 0b110) => rem_signed(a, b),
-                    (1, 0b111) => {
-                        if b == 0 {
-                            a
-                        } else {
-                            a % b
-                        }
-                    }
+                    (1, 0b111) => a.checked_rem(b).unwrap_or(a),
                     _ => return Err(Self::raise_illegal(u64::from(insn))),
                 };
                 self.set_reg(rd, value);
@@ -860,7 +851,7 @@ impl Cpu {
                     }
                     (1, 0b101) => {
                         let (x, y) = (a as u32, b as u32);
-                        let r = if y == 0 { u32::MAX } else { x / y };
+                        let r = x.checked_div(y).unwrap_or(u32::MAX);
                         sext(r as u64, 32)
                     }
                     (1, 0b110) => {
@@ -870,7 +861,7 @@ impl Cpu {
                     }
                     (1, 0b111) => {
                         let (x, y) = (a as u32, b as u32);
-                        let r = if y == 0 { x } else { x % y };
+                        let r = x.checked_rem(y).unwrap_or(x);
                         sext(r as u64, 32)
                     }
                     _ => return Err(Self::raise_illegal(u64::from(insn))),
@@ -895,12 +886,7 @@ impl Cpu {
         Ok(Flow::Next(next))
     }
 
-    fn execute_system(
-        &mut self,
-        insn: u32,
-        next: u64,
-        intercept_sbi: bool,
-    ) -> Result<Flow, Trap> {
+    fn execute_system(&mut self, insn: u32, next: u64, intercept_sbi: bool) -> Result<Flow, Trap> {
         let funct3 = (insn >> 12) & 0x7;
         if funct3 == 0 {
             match insn {
@@ -973,12 +959,10 @@ impl Cpu {
             let rd = ((insn >> 7) & 0x1F) as usize;
             let rs1 = ((insn >> 15) & 0x1F) as usize;
             let min_privilege = (address >> 8) & 0b11;
-            let has_privilege = match (min_privilege, self.privilege) {
-                (0, _) => true,
-                (1, Privilege::Supervisor | Privilege::Machine) => true,
-                (3, Privilege::Machine) => true,
-                _ => false,
-            };
+            let has_privilege = matches!(
+                (min_privilege, self.privilege),
+                (0, _) | (1, Privilege::Supervisor | Privilege::Machine) | (3, Privilege::Machine)
+            );
             if !has_privilege {
                 return Err(Self::raise_illegal(u64::from(insn)));
             }
@@ -1103,8 +1087,9 @@ impl Cpu {
         match insn & 0b11 {
             0b00 => {
                 // Quadrant 0: stack-relative and register-offset memory ops.
-                let lw_offset =
-                    (((insn >> 10) & 0x7) << 3) | (((insn >> 6) & 1) << 2) | (((insn >> 5) & 1) << 6);
+                let lw_offset = (((insn >> 10) & 0x7) << 3)
+                    | (((insn >> 6) & 1) << 2)
+                    | (((insn >> 5) & 1) << 6);
                 let ld_offset = (((insn >> 10) & 0x7) << 3) | (((insn >> 5) & 0x3) << 6);
                 match funct3 {
                     0b000 => {
@@ -1432,7 +1417,7 @@ mod tests {
             addi(1, 0, 40),
             addi(1, 1, 2),
             addi(2, 0, 6),
-            r_type(1, 2, 1, 0, 3, 0x33),    // mul x3, x1, x2
+            r_type(1, 2, 1, 0, 3, 0x33),     // mul x3, x1, x2
             r_type(1, 2, 3, 0b100, 4, 0x33), // div x4, x3, x2
             r_type(0x20, 2, 1, 0, 5, 0x33),  // sub x5, x1, x2
         ];
@@ -1463,8 +1448,9 @@ mod tests {
         // sd/ld a full word, lb a negative byte.
         let data_addr = RAM_BASE + 0x400;
         let program = [
-            // x1 = data_addr (build with lui+addi like a real assembler)
-            (((0x8000_u32) << 12) | (1 << 7) | 0x37), // lui x1, 0x80000 -> 0x80000000
+            // x1 = 0x8000_0000 + 0x400, built as (1 << 31) + 0x400.
+            addi(1, 0, 1),
+            i_type(31, 1, 0b001, 1, 0x13), // slli x1, x1, 31
             addi(1, 1, 0x400),
             addi(2, 0, -5),
             // sb x2, 0(x1)
@@ -1520,15 +1506,15 @@ mod tests {
         let handler = i_type(0x342, 0, 0b010, 1, 0x73);
         let mut program = vec![
             addi(1, 0, 1),
-            i_type(31, 1, 0b001, 1, 0x13),    // slli x1, x1, 31 -> 0x80000000
-            addi(1, 1, 0x100),                // x1 = handler addr
+            i_type(31, 1, 0b001, 1, 0x13), // slli x1, x1, 31 -> 0x80000000
+            addi(1, 1, 0x100),             // x1 = handler addr
             i_type(0x305, 1, 0b001, 0, 0x73), // csrw mtvec, x1
-            0xFFFF_FFFF,                      // illegal instruction
+            0xFFFF_FFFF,                   // illegal instruction
         ];
         program.resize(0x40, 0x0000_0013); // nops up to +0x100
         program.push(handler);
         let (mut cpu, mut bus) = machine_with(&program);
-        run(&mut cpu, &mut bus, 4);
+        run(&mut cpu, &mut bus, 5);
         assert_eq!(cpu.pc(), RAM_BASE + 0x100);
         assert_eq!(cpu.privilege(), Privilege::Machine);
         cpu.step(&mut bus, false);
@@ -1556,7 +1542,9 @@ mod tests {
         let data_page = RAM_BASE + 0x8000;
         let data_page_ro = RAM_BASE + 0x9000;
         let ppn = |addr: u64| (addr >> 12) << 10;
-        bus.ram_mut().write_int(root, 8, ppn(mid) | 1).expect("root pte");
+        bus.ram_mut()
+            .write_int(root, 8, ppn(mid) | 1)
+            .expect("root pte");
         bus.ram_mut()
             .write_int(mid + 2 * 8, 8, ppn(leaf) | 1)
             .expect("mid pte");
@@ -1567,14 +1555,27 @@ mod tests {
         bus.ram_mut()
             .write_int(leaf + 8, 8, ppn(data_page_ro) | 0x03)
             .expect("leaf ro");
-        cpu.write_csr(super::CSR_SATP, (8_u64 << 60) | ((root >> 12) & ((1 << 44) - 1)));
+        cpu.write_csr(
+            super::CSR_SATP,
+            (8_u64 << 60) | ((root >> 12) & ((1 << 44) - 1)),
+        );
         assert_eq!(
-            cpu.translate(&mut bus, 0x40_0000 + 0x42, Access::Load).expect("translate"),
+            cpu.translate(&mut bus, 0x40_0000 + 0x42, Access::Load)
+                .expect("translate"),
             data_page + 0x42
         );
-        assert!(cpu.translate(&mut bus, 0x40_1000, Access::Store).is_err(), "RO page must fault on store");
-        assert!(cpu.translate(&mut bus, 0x40_1000, Access::Fetch).is_err(), "non-X page must fault on fetch");
-        assert!(cpu.translate(&mut bus, 0x80_0000, Access::Load).is_err(), "unmapped must fault");
+        assert!(
+            cpu.translate(&mut bus, 0x40_1000, Access::Store).is_err(),
+            "RO page must fault on store"
+        );
+        assert!(
+            cpu.translate(&mut bus, 0x40_1000, Access::Fetch).is_err(),
+            "non-X page must fault on fetch"
+        );
+        assert!(
+            cpu.translate(&mut bus, 0x80_0000, Access::Load).is_err(),
+            "unmapped must fault"
+        );
         // Sv48 attempt is WARL-rejected: satp keeps Sv39 mode.
         let before = cpu.read_csr(super::CSR_SATP).expect("satp");
         cpu.write_csr(super::CSR_SATP, (9_u64 << 60) | 0x1234);

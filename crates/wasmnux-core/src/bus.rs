@@ -205,7 +205,7 @@ impl SystemBus {
         let virtio_irq = self
             .virtio_blk
             .as_ref()
-            .map_or(false, VirtioBlock::irq_pending);
+            .is_some_and(VirtioBlock::irq_pending);
         self.plic.set_line(IRQ_UART, uart_irq);
         self.plic.set_line(IRQ_VIRTIO, virtio_irq);
     }
@@ -221,7 +221,8 @@ mod tests {
         bus.write_phys(RAM_BASE + 16, 4, 0xCAFE).expect("ram write");
         assert_eq!(bus.read_phys(RAM_BASE + 16, 4).expect("ram read"), 0xCAFE);
         // UART at its MMIO home, not in RAM.
-        bus.write_phys(UART_BASE, 1, u64::from(b'!')).expect("uart write");
+        bus.write_phys(UART_BASE, 1, u64::from(b'!'))
+            .expect("uart write");
         assert_eq!(bus.uart_mut().take_output(), b"!".to_vec());
         // CLINT mtime starts at zero.
         assert_eq!(bus.read_phys(CLINT_BASE + 0xBFF8, 8).expect("mtime"), 0);

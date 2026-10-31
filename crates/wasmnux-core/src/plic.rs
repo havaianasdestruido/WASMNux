@@ -87,8 +87,7 @@ impl Plic {
             let better = match best {
                 None => true,
                 Some((best_source, best_priority)) => {
-                    priority > best_priority
-                        || (priority == best_priority && source < best_source)
+                    priority > best_priority || (priority == best_priority && source < best_source)
                 }
             };
             if better {
@@ -122,7 +121,7 @@ impl MmioDevice for Plic {
         }
         let value: u32 = match offset {
             o if o < PENDING_BASE => {
-                let source = (o / 4) as u32;
+                let source = ((o - PRIORITY_BASE) / 4) as u32;
                 if source <= MAX_SOURCE {
                     self.priority[source as usize]
                 } else {
@@ -162,12 +161,12 @@ impl MmioDevice for Plic {
         let value = (value & 0xFFFF_FFFF) as u32;
         match offset {
             o if o < PENDING_BASE => {
-                let source = (o / 4) as u32;
+                let source = ((o - PRIORITY_BASE) / 4) as u32;
                 if source <= MAX_SOURCE {
                     self.priority[source as usize] = value & 0x7;
                 }
             }
-            o if o < CONTEXT_BASE && o >= ENABLE_BASE => {
+            o if (ENABLE_BASE..CONTEXT_BASE).contains(&o) => {
                 let context = ((o - ENABLE_BASE) / ENABLE_STRIDE) as usize;
                 let word = ((o - ENABLE_BASE) % ENABLE_STRIDE) / 4;
                 if context < 2 && word < 2 {
@@ -207,7 +206,8 @@ mod tests {
         let mut plic = Plic::new();
         plic.write(10 * 4, 4, 5).expect("priority (UART = 5)");
         plic.write(1 * 4, 4, 3).expect("priority (virtio = 3)");
-        plic.write(ENABLE_S, 4, (1 << 10) | (1 << 1)).expect("enable");
+        plic.write(ENABLE_S, 4, (1 << 10) | (1 << 1))
+            .expect("enable");
         plic
     }
 
@@ -217,7 +217,11 @@ mod tests {
         plic.set_line(1, true);
         plic.set_line(10, true);
         assert!(plic.interrupt_pending(CONTEXT_S));
-        assert_eq!(plic.read(CLAIM_S, 4).expect("claim"), 10, "UART wins over virtio");
+        assert_eq!(
+            plic.read(CLAIM_S, 4).expect("claim"),
+            10,
+            "UART wins over virtio"
+        );
         assert_eq!(plic.read(CLAIM_S, 4).expect("claim 2"), 1);
         plic.write(CLAIM_S, 4, 10).expect("complete 10");
         // Level line still asserted: source 10 becomes claimable again.
@@ -238,7 +242,10 @@ mod tests {
         assert!(!plic.interrupt_pending(CONTEXT_S), "not enabled");
         plic.write(ENABLE_S, 4, 1 << 10).expect("enable");
         plic.write(0x20_1000, 4, 1).expect("threshold = 1");
-        assert!(!plic.interrupt_pending(CONTEXT_S), "priority must exceed threshold");
+        assert!(
+            !plic.interrupt_pending(CONTEXT_S),
+            "priority must exceed threshold"
+        );
         plic.write(0x20_1000, 4, 0).expect("threshold = 0");
         assert!(plic.interrupt_pending(CONTEXT_S));
         assert!(plic.read(0, 2).is_err(), "PLIC is 32-bit only");

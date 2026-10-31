@@ -187,8 +187,10 @@ const PHANDLE_PLIC: u32 = 2;
 /// Builds the complete DTB for this machine.
 #[must_use]
 pub fn build_machine_dtb(params: &MachineDtbParams) -> Vec<u8> {
-    use crate::bus::{CLINT_BASE, CLINT_SIZE, IRQ_UART, IRQ_VIRTIO, PLIC_BASE, PLIC_SIZE,
-        UART_BASE, UART_SIZE, VIRTIO_BASE, VIRTIO_SIZE};
+    use crate::bus::{
+        CLINT_BASE, CLINT_SIZE, IRQ_UART, IRQ_VIRTIO, PLIC_BASE, PLIC_SIZE, UART_BASE, UART_SIZE,
+        VIRTIO_BASE, VIRTIO_SIZE,
+    };
     use crate::clint::TIMEBASE_FREQUENCY;
 
     let mut fdt = FdtBuilder::new();
@@ -250,7 +252,10 @@ pub fn build_machine_dtb(params: &MachineDtbParams) -> Vec<u8> {
     fdt.property_string_list("compatible", &["sifive,clint0", "riscv,clint0"]);
     fdt.property_reg("reg", CLINT_BASE, CLINT_SIZE);
     // <&cpu_intc 3 (MSIP)> <&cpu_intc 7 (MTIP)>
-    fdt.property_cells("interrupts-extended", &[PHANDLE_CPU_INTC, 3, PHANDLE_CPU_INTC, 7]);
+    fdt.property_cells(
+        "interrupts-extended",
+        &[PHANDLE_CPU_INTC, 3, PHANDLE_CPU_INTC, 7],
+    );
     fdt.end_node();
 
     fdt.begin_node(&format!("plic@{PLIC_BASE:x}"));
@@ -259,7 +264,10 @@ pub fn build_machine_dtb(params: &MachineDtbParams) -> Vec<u8> {
     fdt.property_u32("#interrupt-cells", 1);
     fdt.property_empty("interrupt-controller");
     // Context order matches plic.rs: M context first (MEI=11), then S (SEI=9).
-    fdt.property_cells("interrupts-extended", &[PHANDLE_CPU_INTC, 11, PHANDLE_CPU_INTC, 9]);
+    fdt.property_cells(
+        "interrupts-extended",
+        &[PHANDLE_CPU_INTC, 11, PHANDLE_CPU_INTC, 9],
+    );
     fdt.property_u32("riscv,ndev", crate::plic::MAX_SOURCE);
     fdt.property_u32("phandle", PHANDLE_PLIC);
     fdt.end_node();
@@ -380,7 +388,13 @@ mod tests {
         assert_eq!(nodes, 12);
 
         let as_text = String::from_utf8_lossy(&dtb);
-        for needle in ["ns16550a", "virtio,mmio", "sifive,plic-1.0.0", "simple-framebuffer", "rv64imac"] {
+        for needle in [
+            "ns16550a",
+            "virtio,mmio",
+            "sifive,plic-1.0.0",
+            "simple-framebuffer",
+            "rv64imac",
+        ] {
             assert!(as_text.contains(needle), "missing {needle}");
         }
     }

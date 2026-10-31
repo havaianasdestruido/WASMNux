@@ -75,9 +75,10 @@ impl<'a> ElfImage<'a> {
         let mut program_headers = Vec::new();
         for i in 0..ph_count {
             let at = ph_offset
-                .checked_add(i.checked_mul(ph_entry_size).ok_or(VmError::InvalidElf(
-                    "program header offset overflow",
-                ))?)
+                .checked_add(
+                    i.checked_mul(ph_entry_size)
+                        .ok_or(VmError::InvalidElf("program header offset overflow"))?,
+                )
                 .ok_or(VmError::InvalidElf("program header offset overflow"))?;
             if read_u32(data, at)? != PT_LOAD {
                 continue;
@@ -92,7 +93,10 @@ impl<'a> ElfImage<'a> {
             if mem_size < file_size {
                 return Err(VmError::InvalidElf("memsz smaller than filesz"));
             }
-            if offset.checked_add(file_size).is_none_or(|end| end > data.len()) {
+            if offset
+                .checked_add(file_size)
+                .is_none_or(|end| end > data.len())
+            {
                 return Err(VmError::InvalidElf("segment extends past end of file"));
             }
             program_headers.push(ProgramHeader {
@@ -157,8 +161,7 @@ mod tests {
         elf[ph + 8..ph + 16].copy_from_slice(&(120_u64).to_le_bytes());
         elf[ph + 24..ph + 32].copy_from_slice(&paddr.to_le_bytes());
         elf[ph + 32..ph + 40].copy_from_slice(&(payload.len() as u64).to_le_bytes());
-        elf[ph + 40..ph + 48]
-            .copy_from_slice(&((payload.len() + mem_extra) as u64).to_le_bytes());
+        elf[ph + 40..ph + 48].copy_from_slice(&((payload.len() + mem_extra) as u64).to_le_bytes());
         elf.extend_from_slice(payload);
         elf
     }
@@ -169,7 +172,8 @@ mod tests {
         let image = ElfImage::parse(&elf).expect("parse");
         assert_eq!(image.entry(), 0x8000_0000);
         let mut ram = Ram::new(0x8000_0000, 0x1000).expect("ram");
-        ram.write_int(0x8000_0004, 4, 0xFFFF_FFFF).expect("pre-dirty BSS");
+        ram.write_int(0x8000_0004, 4, 0xFFFF_FFFF)
+            .expect("pre-dirty BSS");
         image.load_into(&mut ram).expect("load");
         let mut buf = [0_u8; 8];
         ram.read(0x8000_0000, &mut buf).expect("read back");

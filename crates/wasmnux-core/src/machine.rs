@@ -111,8 +111,7 @@ impl Machine {
         let framebuffer = config.framebuffer.map(|(width, height)| {
             let stride = width * 4;
             let size = u64::from(stride) * u64::from(height);
-            let address =
-                align_down(RAM_BASE + config.ram_size_bytes as u64 - size, PAGE);
+            let address = align_down(RAM_BASE + config.ram_size_bytes as u64 - size, PAGE);
             FramebufferInfo {
                 address,
                 width,
@@ -228,9 +227,7 @@ impl Machine {
     /// DTB/framebuffer reservation).
     fn usable_top(&self) -> u64 {
         let ram_end = RAM_BASE + self.config.ram_size_bytes as u64;
-        let top = self
-            .framebuffer
-            .map_or(ram_end, |fb| fb.address);
+        let top = self.framebuffer.map_or(ram_end, |fb| fb.address);
         top - DTB_RESERVE
     }
 
@@ -250,8 +247,7 @@ impl Machine {
             BootMode::Firmware => {
                 let elf_bytes = self.firmware_elf.as_ref().ok_or_else(|| {
                     VmError::InvalidImage(
-                        "BootMode::Firmware requires an OpenSBI firmware ELF; none loaded"
-                            .into(),
+                        "BootMode::Firmware requires an OpenSBI firmware ELF; none loaded".into(),
                     )
                 })?;
                 Some(ElfImage::parse(elf_bytes)?.entry())
@@ -291,7 +287,9 @@ impl Machine {
             framebuffer: self.framebuffer,
         });
         if dtb.len() as u64 > DTB_RESERVE {
-            return Err(VmError::InvalidImage("generated DTB exceeds reservation".into()));
+            return Err(VmError::InvalidImage(
+                "generated DTB exceeds reservation".into(),
+            ));
         }
         self.bus.ram_mut().write(dtb_address, &dtb)?;
 
@@ -465,7 +463,7 @@ impl Machine {
 
     /// Whether the guest wrote to the disk since the host last persisted it.
     pub fn disk_dirty(&self) -> bool {
-        self.bus.disk().map_or(false, VecBlockBackend::is_dirty)
+        self.bus.disk().is_some_and(VecBlockBackend::is_dirty)
     }
 
     /// Marks the disk clean after the host persisted `disk_image`.
@@ -496,11 +494,11 @@ mod tests {
     /// A microscopic "kernel": SBI putchar 'A', then legacy SBI shutdown.
     fn tiny_kernel() -> Vec<u8> {
         let words = [
-            enc_i(1, 0, 17),        // addi a7, x0, 1 (legacy putchar)
+            enc_i(1, 0, 17),          // addi a7, x0, 1 (legacy putchar)
             enc_i('A' as i32, 0, 10), // addi a0, x0, 'A'
-            0x0000_0073,            // ecall
-            enc_i(8, 0, 17),        // addi a7, x0, 8 (legacy shutdown)
-            0x0000_0073,            // ecall
+            0x0000_0073,              // ecall
+            enc_i(8, 0, 17),          // addi a7, x0, 8 (legacy shutdown)
+            0x0000_0073,              // ecall
         ];
         words.iter().flat_map(|w| w.to_le_bytes()).collect()
     }
@@ -536,7 +534,10 @@ mod tests {
         assert!(machine.pause().is_err(), "pause while created");
         machine.load_kernel_image(tiny_kernel()).expect("kernel");
         machine.boot().expect("boot");
-        assert!(machine.load_kernel_image(tiny_kernel()).is_err(), "load while running");
+        assert!(
+            machine.load_kernel_image(tiny_kernel()).is_err(),
+            "load while running"
+        );
         machine.pause().expect("pause");
         assert!(machine.run_slice(1).is_err(), "run while paused");
         machine.resume().expect("resume");
@@ -549,7 +550,10 @@ mod tests {
         let mut machine = Machine::new(MachineConfig::default()).expect("machine");
         machine.load_kernel_image(tiny_kernel()).expect("kernel");
         let error = machine.boot().expect_err("must require firmware");
-        assert!(error.to_string().contains("firmware ELF"), "actionable message: {error}");
+        assert!(
+            error.to_string().contains("firmware ELF"),
+            "actionable message: {error}"
+        );
         assert_eq!(machine.state(), MachineState::Created);
     }
 

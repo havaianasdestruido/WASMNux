@@ -5,7 +5,7 @@ members = ["crates/wasmnux-core", "crates/wasmnux-wasm"]
 [workspace.package]
 edition = "2021"
 license = "Apache-2.0"
-rust-version = "1.75"
+rust-version = "1.87"
 repository = "https://github.com/havaianasdestruido/WASMNux"
 
 [profile.release]

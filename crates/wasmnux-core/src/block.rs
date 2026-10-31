@@ -94,9 +94,12 @@ impl VecBlockBackend {
     }
 
     fn check_range(&self, offset: u64, len: usize) -> Result<usize> {
-        let start = usize::try_from(offset)
-            .map_err(|_| VmError::OutOfBounds { addr: offset, len })?;
-        if start.checked_add(len).is_some_and(|end| end <= self.data.len()) {
+        let start =
+            usize::try_from(offset).map_err(|_| VmError::OutOfBounds { addr: offset, len })?;
+        if start
+            .checked_add(len)
+            .is_some_and(|end| end <= self.data.len())
+        {
             Ok(start)
         } else {
             Err(VmError::OutOfBounds { addr: offset, len })

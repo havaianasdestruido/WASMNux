@@ -60,9 +60,10 @@ impl Ram {
     /// # Errors
     /// [`VmError::OutOfBounds`] if the range leaves RAM.
     pub fn read(&self, addr: u64, buf: &mut [u8]) -> Result<()> {
-        let start = self
-            .offset(addr, buf.len())
-            .ok_or(VmError::OutOfBounds { addr, len: buf.len() })?;
+        let start = self.offset(addr, buf.len()).ok_or(VmError::OutOfBounds {
+            addr,
+            len: buf.len(),
+        })?;
         buf.copy_from_slice(&self.data[start..start + buf.len()]);
         Ok(())
     }
@@ -72,9 +73,10 @@ impl Ram {
     /// # Errors
     /// [`VmError::OutOfBounds`] if the range leaves RAM.
     pub fn write(&mut self, addr: u64, data: &[u8]) -> Result<()> {
-        let start = self
-            .offset(addr, data.len())
-            .ok_or(VmError::OutOfBounds { addr, len: data.len() })?;
+        let start = self.offset(addr, data.len()).ok_or(VmError::OutOfBounds {
+            addr,
+            len: data.len(),
+        })?;
         self.data[start..start + data.len()].copy_from_slice(data);
         Ok(())
     }
@@ -127,8 +129,12 @@ mod tests {
     #[test]
     fn read_write_round_trip() {
         let mut ram = Ram::new(BASE, 0x1000).expect("ram");
-        ram.write_int(BASE + 8, 8, 0x0123_4567_89AB_CDEF).expect("write");
-        assert_eq!(ram.read_int(BASE + 8, 8).expect("read"), 0x0123_4567_89AB_CDEF);
+        ram.write_int(BASE + 8, 8, 0x0123_4567_89AB_CDEF)
+            .expect("write");
+        assert_eq!(
+            ram.read_int(BASE + 8, 8).expect("read"),
+            0x0123_4567_89AB_CDEF
+        );
         assert_eq!(ram.read_int(BASE + 8, 1).expect("read byte"), 0xEF);
         assert_eq!(ram.read_int(BASE + 12, 4).expect("read word"), 0x0123_4567);
     }
@@ -138,7 +144,10 @@ mod tests {
         let mut ram = Ram::new(BASE, 0x100).expect("ram");
         assert_eq!(
             ram.read_int(BASE - 8, 8),
-            Err(VmError::OutOfBounds { addr: BASE - 8, len: 8 })
+            Err(VmError::OutOfBounds {
+                addr: BASE - 8,
+                len: 8
+            })
         );
         assert!(ram.write_int(BASE + 0xFC, 8, 0).is_err());
         assert!(ram.write(BASE + 0x80, &[0_u8; 0x81]).is_err());

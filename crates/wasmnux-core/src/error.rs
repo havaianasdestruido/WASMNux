@@ -15,7 +15,10 @@ pub enum VmError {
     /// A kernel / initrd / disk image failed validation.
     InvalidImage(String),
     /// A lifecycle transition was attempted from an illegal state.
-    IllegalTransition { from: &'static str, action: &'static str },
+    IllegalTransition {
+        from: &'static str,
+        action: &'static str,
+    },
     /// The machine configuration is invalid.
     InvalidConfig(String),
     /// A block backend operation failed.
