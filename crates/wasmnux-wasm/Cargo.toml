@@ -1,0 +1,17 @@
+[package]
+name = "wasmnux-wasm"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+wasmnux-riscv = { path = "../wasmnux-riscv" }
+wasmnux-storage = { path = "../wasmnux-storage" }
+wasmnux-virtio = { path = "../wasmnux-virtio" }
+wasmnux-net = { path = "../wasmnux-net" }
+
+[lints]
+workspace = true
