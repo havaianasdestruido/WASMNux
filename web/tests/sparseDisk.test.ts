@@ -134,4 +134,40 @@ describe("SparseDisk", () => {
     expect(await store.list("disks/t8/")).toEqual([]);
     await expect(SparseDisk.open(store, "t8")).rejects.toBeInstanceOf(DiskError);
   });
+
+  it("serialises overlapping operations (regression: reset racing reads tore state)", async () => {
+    const store = new MemoryChunkStore();
+    const disk = await SparseDisk.open(store, "t-serial", { capacityBytes: 2 * MiB });
+    const payload = new TextEncoder().encode("concurrent-marker");
+    await disk.write(0, payload);
+    await disk.flush();
+
+    // Fire a destroy and several reads/writes without awaiting in between.
+    // With serialisation the calls run one-at-a-time in issue order, so the
+    // first read sees the marker, later reads see an empty disk, and no
+    // operation ever throws a corruption/parse error.
+    const results = await Promise.allSettled([
+      disk.read(0, payload.length),
+      disk.destroy(),
+      disk.read(0, payload.length),
+      disk.write(0, payload),
+      disk.flush(),
+      disk.read(0, payload.length),
+    ]);
+    for (const r of results) {
+      expect(r.status).toBe("fulfilled");
+    }
+    const first = results[0];
+    const afterDestroy = results[2];
+    const last = results[5];
+    if (first.status === "fulfilled") {
+      expect(new TextDecoder().decode(first.value)).toBe("concurrent-marker");
+    }
+    if (afterDestroy.status === "fulfilled") {
+      expect(afterDestroy.value.every((b) => b === 0)).toBe(true);
+    }
+    if (last.status === "fulfilled") {
+      expect(new TextDecoder().decode(last.value)).toBe("concurrent-marker");
+    }
+  });
 });

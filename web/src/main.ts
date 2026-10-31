@@ -62,6 +62,7 @@ class App {
   readonly #terminal: GuestTerminal;
   readonly #vm: VmClient;
   readonly #disks = new Map<ProfileId, SparseDisk>();
+  readonly #opening = new Map<ProfileId, Promise<SparseDisk>>();
   readonly #assetStates = new Map<ProfileId, AssetState>();
   #selected: ProfileId = "vanilla";
   #bootedProfile: ProfileId | undefined;
@@ -305,6 +306,23 @@ class App {
     if (existing !== undefined) {
       return existing;
     }
+    // Dedupe concurrent first-opens (e.g. a marker read racing a reset's
+    // recreate): two SparseDisk.open() calls creating the same disk could
+    // interleave their initial-manifest writes.
+    const inFlight = this.#opening.get(profile.id);
+    if (inFlight !== undefined) {
+      return inFlight;
+    }
+    const opening = this.#openDisk(profile);
+    this.#opening.set(profile.id, opening);
+    try {
+      return await opening;
+    } finally {
+      this.#opening.delete(profile.id);
+    }
+  }
+
+  async #openDisk(profile: Profile): Promise<SparseDisk> {
     try {
       const opened = await SparseDisk.open(this.#store, profile.diskId);
       this.#disks.set(profile.id, opened);

@@ -19,6 +19,12 @@
  *  - Snapshots are extra manifests pointing at the same immutable chunk
  *    objects (copy-on-write): cheap, and a snapshot can never be hurt by
  *    later writes to the live disk.
+ *  - All public operations are serialised on an internal promise chain:
+ *    overlapping calls (e.g. a UI read while a reset's destroy/recreate is
+ *    in flight) can never tear a manifest or chunk write. This was a real
+ *    bug caught by the browser e2e suite (chunk X missing / manifest not
+ *    JSON under concurrent reset+read). Cross-tab exclusion would need
+ *    Web Locks and is tracked in TODO.MD Phase 4.
  */
 
 import { crc32 } from "../crc32.js";
@@ -139,6 +145,8 @@ export class SparseDisk {
   #flushed: Map<number, ChunkRef>;
   #pending: Map<number, ChunkRef>;
   #seq: number;
+  /** Serialises every public async operation (see class doc). */
+  #tail: Promise<void>;
 
   private constructor(
     store: ChunkStore,
@@ -154,6 +162,17 @@ export class SparseDisk {
     this.#flushed = chunks;
     this.#pending = new Map();
     this.#seq = 0;
+    this.#tail = Promise.resolve();
+  }
+
+  /** Runs `op` after all previously enqueued operations settle. */
+  #enqueue<T>(op: () => Promise<T>): Promise<T> {
+    const result = this.#tail.then(op, op);
+    this.#tail = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    return result;
   }
 
   #manifestKey(): string {
@@ -196,7 +215,7 @@ export class SparseDisk {
       throw new DiskError(`capacity ${capacity} must be a positive multiple of ${SECTOR_SIZE}`);
     }
     const disk = new SparseDisk(store, prefix, capacity, 0, new Map());
-    await disk.flush(); // persist the empty manifest so the disk exists durably
+    await disk.#flushNow(); // persist the empty manifest so the disk exists durably
     return disk;
   }
 
@@ -249,7 +268,7 @@ export class SparseDisk {
   }
 
   /** Reads `length` bytes at `offset`; holes read as zeroes. CRC-verified. */
-  async read(offset: number, length: number): Promise<Uint8Array> {
+  async #readNow(offset: number, length: number): Promise<Uint8Array> {
     this.#checkRange(offset, length);
     const out = new Uint8Array(length);
     let position = 0;
@@ -271,7 +290,7 @@ export class SparseDisk {
    * Writes `data` at `offset`. New chunk objects are uploaded immediately;
    * durability is only promised after `flush()`.
    */
-  async write(offset: number, data: Uint8Array): Promise<void> {
+  async #writeNow(offset: number, data: Uint8Array): Promise<void> {
     this.#checkRange(offset, data.length);
     let position = 0;
     while (position < data.length) {
@@ -335,7 +354,7 @@ export class SparseDisk {
    * Durable commit point: replaces the manifest with the pending state.
    * After a successful flush, a crash reopens exactly this state.
    */
-  async flush(): Promise<void> {
+  async #flushNow(): Promise<void> {
     const merged = this.#liveMap();
     this.#generation += 1;
     await this.#writeManifest(this.#manifestKey(), this.#generation, merged);
@@ -353,7 +372,7 @@ export class SparseDisk {
    * chunk objects) state. Pending chunk objects are already uploaded, so a
    * snapshot is crash-consistent too; it never mutates the live manifest.
    */
-  async snapshot(id: string): Promise<void> {
+  async #snapshotNow(id: string): Promise<void> {
     const key = this.#snapshotKey(id);
     if ((await this.#store.get(key)) !== undefined) {
       throw new DiskError(`snapshot "${id}" already exists`);
@@ -362,7 +381,7 @@ export class SparseDisk {
   }
 
   /** Snapshot ids currently stored for this disk. */
-  async listSnapshots(): Promise<string[]> {
+  async #listSnapshotsNow(): Promise<string[]> {
     const keys = await this.#store.list(`${this.#prefix}/snapshots/`);
     return keys
       .map((k) => k.slice(k.lastIndexOf("/") + 1).replace(/\.json$/, ""))
@@ -370,7 +389,7 @@ export class SparseDisk {
   }
 
   /** Restores the live disk to a snapshot (flushes the restored manifest). */
-  async restoreSnapshot(id: string): Promise<void> {
+  async #restoreSnapshotNow(id: string): Promise<void> {
     const raw = await this.#store.get(this.#snapshotKey(id));
     if (raw === undefined) {
       throw new DiskError(`snapshot "${id}" does not exist`);
@@ -385,10 +404,10 @@ export class SparseDisk {
     }
     this.#pending = new Map();
     this.#flushed = chunks;
-    await this.flush();
+    await this.#flushNow();
   }
 
-  async deleteSnapshot(id: string): Promise<void> {
+  async #deleteSnapshotNow(id: string): Promise<void> {
     await this.#store.delete(this.#snapshotKey(id));
   }
 
@@ -411,7 +430,7 @@ export class SparseDisk {
    * stream handed to the WASM VM at boot and to the user for backups.
    */
   async exportImage(): Promise<Uint8Array> {
-    return this.read(0, this.#capacity);
+    return this.#enqueue(() => this.#readNow(0, this.#capacity));
   }
 
   /**
@@ -420,7 +439,7 @@ export class SparseDisk {
    * are not re-uploaded. Ends with a flush, so an import is durable and a
    * crash cannot expose a half-imported image through the manifest.
    */
-  async importImage(image: Uint8Array): Promise<void> {
+  async #importImageNow(image: Uint8Array): Promise<void> {
     if (image.length !== this.#capacity) {
       throw new DiskError(
         `image size ${image.length} does not equal disk capacity ${this.#capacity}`,
@@ -447,16 +466,55 @@ export class SparseDisk {
       await this.#store.put(key, chunkData);
       this.#pending.set(index, { key, crc, length: chunkData.length });
     }
-    await this.flush();
+    await this.#flushNow();
   }
 
   /** Deletes the disk manifest, snapshots and all chunk objects. */
-  async destroy(): Promise<void> {
+  async #destroyNow(): Promise<void> {
     const keys = await this.#store.list(`${this.#prefix}/`);
     for (const key of keys) {
       await this.#store.delete(key);
     }
     this.#pending = new Map();
     this.#flushed = new Map();
+  }
+
+  // -- Public API: every operation is serialised through #enqueue so that
+  // overlapping calls can never interleave chunk/manifest mutations.
+
+  async read(offset: number, length: number): Promise<Uint8Array> {
+    return this.#enqueue(() => this.#readNow(offset, length));
+  }
+
+  async write(offset: number, data: Uint8Array): Promise<void> {
+    return this.#enqueue(() => this.#writeNow(offset, data));
+  }
+
+  async flush(): Promise<void> {
+    return this.#enqueue(() => this.#flushNow());
+  }
+
+  async snapshot(id: string): Promise<void> {
+    return this.#enqueue(() => this.#snapshotNow(id));
+  }
+
+  async listSnapshots(): Promise<string[]> {
+    return this.#enqueue(() => this.#listSnapshotsNow());
+  }
+
+  async restoreSnapshot(id: string): Promise<void> {
+    return this.#enqueue(() => this.#restoreSnapshotNow(id));
+  }
+
+  async deleteSnapshot(id: string): Promise<void> {
+    return this.#enqueue(() => this.#deleteSnapshotNow(id));
+  }
+
+  async importImage(image: Uint8Array): Promise<void> {
+    return this.#enqueue(() => this.#importImageNow(image));
+  }
+
+  async destroy(): Promise<void> {
+    return this.#enqueue(() => this.#destroyNow());
   }
 }

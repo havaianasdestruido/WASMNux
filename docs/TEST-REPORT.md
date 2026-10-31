@@ -32,7 +32,7 @@ reason and what substitute validation exists). Nothing is extrapolated.
 | T-11 | Guest BusyBox cross-build (riscv64) + behaviour tests + initramfs | Guest-images CI job: musl-cross-make toolchain → `build-busybox.sh` → `busybox-applets.sh` against the **riscv64 binary under qemu-user** → `build-initramfs.sh` | static riscv64 busybox, all mission applets present, behaviour suite green, initramfs artifact | **PASS** — runs 41243028585 & 41243445871 both green end-to-end; artifact `vanilla-initramfs` ≈ 783 KB. Hard road, each failure real and fixed: (1) glibc has no soft-float stubs (`gnu/stubs-lp64.h`) → musl toolchain; (2) musl-cross-make's default GCC 9.4.0 fails linking `libgcc_s.so` vs binutils 2.44 → GCC 14.3.0 (in-tree patches); (3) default reduced 4.19.88 headers lack `linux/kd.h` → full 6.15.7 UAPI (hash-verified tarball); (4) BusyBox `tc` references removed CBQ UAPI → `CONFIG_TC` disabled (not a required applet). Behaviour proof is qemu-user, **not** yet in-emulator. | **PASS (after fixes)** |
 | T-12 | Shell-script syntax | `bash -n` / `sh -n` over `guest/scripts`, `guest/tests`, `scripts` | clean | clean | **PASS** |
 | T-13 | Workflow YAML validity | `python -c yaml.safe_load` for both workflows | parse | ok | **PASS** |
-| T-15 | **Browser end-to-end suite** (Playwright, real Chromium + real CI-built WASM core): (a) capabilities render + Rust core instantiates (`WASM core: ready`, storeKind=`opfs`); (b) boot stays honestly disabled with enumerated blockers when guest assets are absent; (c) disk marker written through SparseDisk→OPFS **survives a full page reload**; (d) snapshot restore reverts later writes, profiles stay isolated, reset of one profile preserves the other — across reload; (e) renderer self-test changes the framebuffer canvas (screenshot diff) on the Canvas2D fallback in adapter-less headless | CI e2e job `npx playwright test` (Chromium headless shell, SwiftShader flags) | all pass | **5 passed / 1 skipped** (the gated full-boot test skips loudly without guest assets) — job green from run 41236543791's CI sibling onward | **PASS** |
+| T-15 | **Browser end-to-end suite** (Playwright, real Chromium + real CI-built WASM core): (a) capabilities render + Rust core instantiates (`WASM core: ready`, storeKind=`opfs`); (b) boot stays honestly disabled with enumerated blockers when guest assets are absent; (c) disk marker written through SparseDisk→OPFS **survives a full page reload**; (d) snapshot restore reverts later writes, profiles stay isolated, reset of one profile preserves the other — across reload; (e) renderer self-test changes the framebuffer canvas (screenshot diff) on the Canvas2D fallback in adapter-less headless | CI e2e job `npx playwright test` (Chromium headless shell, SwiftShader flags) | all pass | **5 passed / 1 skipped** (the gated full-boot test skips loudly without guest assets) — job green (one later push run exposed the storage-concurrency bug documented below; fixed and regression-covered) | **PASS** |
 | T-14 | Feasibility & version ground truth | Live queries: kernel.org `releases.json` (kernel **7.3.1** stable, 2026-10-30), debian.org releases (Debian **13 trixie**, pt. 13.7, first official riscv64), GitHub API for v86/RVVM/qemu-wasm/rvemu/riscv-rust (licenses + activity) | evidence-based ADR | recorded in `docs/ARCHITECTURE.md` | **PASS** |
 
 ## NOT EXECUTED — explicitly, with reasons and substitutes
@@ -57,6 +57,14 @@ reason and what substitute validation exists). Nothing is extrapolated.
 - Two CPU *test* encodings built `0x80000000` with a bare `lui` (sign
   extension makes that wrong) — caught by review, fixed with `1<<31`.
 - glibc soft-float stubs (T-11) → musl toolchain.
+- **Real storage-concurrency bug, found by e2e (run 41246304071):** a
+  reset (destroy+recreate) racing disk-marker reads produced
+  `chunk object … is missing` and `disk manifest is not valid JSON` —
+  overlapping async disk operations interleaved manifest/chunk mutations.
+  Fixed properly: every public SparseDisk operation is serialised on an
+  internal promise chain, and concurrent first-opens of a profile disk
+  are deduplicated in the app. A unit regression test locks the ordering
+  semantics (in-memory backend); the Chromium e2e remains the real guard.
 - Vite dev rewrote the worker's `/wasm/` dynamic import into its module
   pipeline (`?import`), which refuses /public files → worker URL now built
   from the runtime origin. The e2e diagnostics (page snapshots) pinpointed it.

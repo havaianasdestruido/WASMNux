@@ -69,6 +69,7 @@
 - [ ] Implement quota handling. *(estimate/persist surfaced in UI ✓; graceful QuotaExceeded *behaviour* not yet test-proven — open.)*
 - [x] Implement backup and restoration.
 - [x] Implement import/export. *(Validation unit-tested.)*
+- [ ] Implement cross-tab disk locking. *(Web Locks API around open/flush; today two tabs share a profile disk unsafely — same-tab operations are serialised inside SparseDisk.)*
 - [ ] Implement async block bridge. *(Worker ChunkStore directly behind VirtIO, replacing v1 whole-image load/export.)*
 - [ ] Test complete browser restart persistence. *(Page-reload persistence PROVEN in e2e ✓; full browser-process restart evidence still required.)*
 
