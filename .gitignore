@@ -1,0 +1,11 @@
+/target
+**/node_modules
+/web/dist
+/web/test-results
+/web/playwright-report
+/web/src/wasm/*.wasm
+/web/public/guest/
+guest/build/
+*.patch
+!guest/**/*.patch
+.DS_Store
