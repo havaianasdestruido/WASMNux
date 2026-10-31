@@ -77,12 +77,12 @@
 - [ ] Configure the kernel for the guest architecture. *(guest/kernel/config.fragment: virtio-mmio/blk, 8250, simplefb, ext4, initramfs.)*
 - [ ] Enable the required virtual-device drivers.
 - [ ] Build the kernel. *(guest.yml dispatch job; cross gcc-riscv64-linux-gnu.)*
-- [ ] Build BusyBox. *(riscv64, static, soft-float until Phase-2 F/D lands; applet list enforced by script.)*
-- [ ] Build the initramfs. *(guest/scripts/build-initramfs.sh, newc cpio + gzip.)*
+- [x] Build BusyBox. *(riscv64 static soft-float (musl) built in guest CI; mission applet list enforced — T-11. tc applet disabled: references CBQ UAPI removed from modern headers.)*
+- [x] Build the initramfs. *( `vanilla-initramfs` CI artifact ≈783 KB, newc cpio.gz — T-11.)*
 - [ ] Implement `/init`. *(Mounts proc/sys/dev, persistent virtio root or data partition, execs sh on console.)*
 - [ ] Implement a usable root filesystem.
 - [ ] Boot the actual Linux kernel. *(Acceptance: kernel log to shell prompt in browser terminal + native harness.)*
-- [ ] Validate essential BusyBox commands. *(guest/tests/busybox-applets.sh executes behaviour tests for every Mission-§3 applet inside the guest.)*
+- [ ] Validate essential BusyBox commands. *(Behaviour suite passes on the real riscv64 binary under qemu-user ✓ (T-11); in-guest (our emulator) validation waits for the kernel.)*
 - [ ] Validate persistent filesystem access. *(Create file → poweroff → reboot → file present with same content/hash.)*
 
 ## Phase 6 — Debian Compatibility
@@ -150,7 +150,7 @@
 - [x] Complete TypeScript tests. *(tsc strict + ESLint + vitest 28/28.)*
 - [ ] Complete WASM tests. *(CI build + Chromium instantiation ✓; in-browser guest execution pending.)*
 - [ ] Complete kernel boot tests. *(Native harness: OpenSBI→7.3.x→shell; then browser.)*
-- [ ] Complete BusyBox tests. *(Harness itself validated on host BusyBox 40/0/3; riscv64/in-guest execution pending guest CI.)*
+- [ ] Complete BusyBox tests. *(Host + qemu-user behaviour proven (T-10/T-11); in-guest execution pending.)*
 - [ ] Complete Debian tests. *(boot/login/dpkg/apt/persistence per Mission §8F.)*
 - [ ] Complete storage tests. *(CRUD/snapshots/import-export/interrupted-write covered at unit + e2e level; quota + browser-restart cases open.)*
 - [ ] Complete WebGPU tests. *(Enabled + disabled configurations.)*
