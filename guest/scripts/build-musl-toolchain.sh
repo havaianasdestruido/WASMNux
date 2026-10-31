@@ -27,10 +27,15 @@ git checkout --quiet "${MUSL_CROSS_MAKE_COMMIT}"
 # fails to link against its own bundled binutils 2.44 for riscv64
 # (observed in guest CI, run 41236543791: libgcc_s.so collect2 failure).
 # 14.3.0 has patches shipped in-tree and matches binutils 2.44.
+# LINUX_VER: the default reduced sabotage header set (4.19.88) lacks
+# UAPI headers BusyBox needs (linux/kd.h — guest CI run after 4b0e627);
+# 6.15.7 is the newest full-kernel version musl-cross-make ships a hash
+# for, so headers come from a verified kernel.org tarball.
 cat > config.mak <<EOF
 TARGET = riscv64-linux-musl
 OUTPUT = ${OUT_DIR}
 GCC_VER = 14.3.0
+LINUX_VER = 6.15.7
 GCC_CONFIG += --with-arch=rv64imac --with-abi=lp64 --enable-languages=c
 EOF
 
