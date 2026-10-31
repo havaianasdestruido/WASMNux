@@ -76,7 +76,7 @@ jobs:
             for f in musl-toolchain.log busybox-build.log; do
               if [ -f "$f" ]; then
                 printf '### %s (error lines)\n' "$f"
-                grep -n -i -m 40 -E "error:|Error [0-9]|No such file|not found|FAILED|Killed|Out of memory" "$f" | head -c 9000 || true
+                grep -n -B8 -m 6 -E "collect2: error|error: |Error [0-9]|No such file|Killed|Out of memory" "$f" | head -c 12000 || true
                 printf '\n### %s (tail)\n' "$f"
                 tail -n 60 "$f" | head -c 9000
                 printf '\n'

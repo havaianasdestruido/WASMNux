@@ -23,9 +23,14 @@ fi
 cd "${WORK_DIR}/musl-cross-make"
 git checkout --quiet "${MUSL_CROSS_MAKE_COMMIT}"
 
+# GCC_VER: musl-cross-make's default is the ancient 9.4.0, whose libgcc
+# fails to link against its own bundled binutils 2.44 for riscv64
+# (observed in guest CI, run 41236543791: libgcc_s.so collect2 failure).
+# 14.3.0 has patches shipped in-tree and matches binutils 2.44.
 cat > config.mak <<EOF
 TARGET = riscv64-linux-musl
 OUTPUT = ${OUT_DIR}
+GCC_VER = 14.3.0
 GCC_CONFIG += --with-arch=rv64imac --with-abi=lp64 --enable-languages=c
 EOF
 
