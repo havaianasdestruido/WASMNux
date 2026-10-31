@@ -9,3 +9,6 @@ guest/build/
 *.patch
 !guest/**/*.patch
 .DS_Store
+web/public/wasm/
+web/test-results/
+web/playwright-report/

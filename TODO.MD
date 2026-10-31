@@ -4,7 +4,9 @@
 > its implementation *and* associated tests pass, with evidence in
 > `docs/TEST-REPORT.md`. Incomplete items are never deleted to look finished.
 > Architecture rationale: `docs/ARCHITECTURE.md`.
-> Status at a glance: **Phase 0 complete · Phase 1 in progress · Phases 2–12 open.**
+> Status at a glance: **Phase 0 complete · Phase 1 complete (CI green incl. browser e2e) ·
+> Phases 2–4 substantially implemented and unit-verified; first actual Linux boot (Phase 5)
+> still gated on guest-image CI. Evidence: `docs/TEST-REPORT.md`.**
 
 ## Phase 0 — Repository Audit and Feasibility
 - [x] Inspect the existing repository. *(Empty except Apache-2.0 LICENSE; branch arena/c540599d-wasmnux.)*
@@ -20,55 +22,55 @@
 - [x] Audit dev-environment constraints. *(Sandbox: no Rust toolchain, no kernel.org/debian.org network; GitHub/npm/PyPI only. Consequence: Rust verified on GitHub Actions, TypeScript locally, guest builds in dispatch CI — recorded in `docs/TEST-REPORT.md`.)*
 
 ## Phase 1 — Project Foundation
-- [ ] Establish the Rust workspace. *(crates/wasmnux-core + crates/wasmnux-wasm — code written; checked when CI cargo fmt/clippy/test passes.)*
-- [ ] Establish the TypeScript application. *(web/ with strict tsconfig — checked when tsc + vitest + build pass.)*
-- [ ] Configure the WASM compilation target. *(wasm32-unknown-unknown + wasm-bindgen — checked when CI wasm build passes.)*
-- [ ] Establish strict linting and formatting. *(rustfmt, clippy -D warnings, tsc strict, ESLint-less strict config + prettier-check via tsc/vitest gate — see CI.)*
-- [ ] Configure automated testing. *(cargo test, vitest, Playwright config.)*
-- [ ] Establish CI. *(.github/workflows/ci.yml on push; guest.yml manual dispatch.)*
-- [ ] Implement browser capability detection. *(WASM, WebGPU, OPFS, IndexedDB, SharedArrayBuffer, storage persistence — web/src/capabilities.ts.)*
-- [ ] Establish reproducible dependency policy. *(Cargo.lock + package-lock committed; every dependency justified in docs/DEPENDENCIES.md.)*
+- [x] Establish the Rust workspace. *(crates/wasmnux-core + crates/wasmnux-wasm; CI fmt/clippy/-D warnings/cargo test 40/40 green — TEST-REPORT T-05…T-07.)*
+- [x] Establish the TypeScript application. *(web/ strict tsc + ESLint + vitest 28/28 + production build green locally and in CI — T-01…T-04.)*
+- [x] Configure the WASM compilation target. *(wasm32-unknown-unknown release build + wasm-bindgen 0.2.130 package generated in CI — T-08/T-09.)*
+- [x] Establish strict linting and formatting. *(rustfmt, clippy -D warnings, tsc strict, ESLint-less strict config + prettier-check via tsc/vitest gate — see CI.)*
+- [x] Configure automated testing. *(cargo test 40, vitest 28, Playwright e2e suite — all executing in CI.)*
+- [x] Establish CI. *(ci.yml: fmt/rust/web/e2e jobs green; guest.yml builds guest images (dispatch + trigger file).)*
+- [x] Implement browser capability detection. *(Unit-tested and exercised in real Chromium by e2e.)*
+- [ ] Establish reproducible dependency policy. *(package-lock committed + wasm-bindgen exact-pinned; Cargo.lock not yet committed (no local cargo) — policy doc in docs/DEPENDENCIES.md; lockfile commit remains.)*
 
 ## Phase 2 — Virtualization Core
 - [ ] Implement or integrate the selected VM engine. *(Own Rust RV64 machine in crates/wasmnux-core.)*
-- [ ] Implement guest CPU execution. *(RV64I + M + A + C-subset + Zicsr/Zifencei; hand-assembled unit tests per instruction class.)*
+- [x] Implement guest CPU execution. *(RV64 IMAC+Zicsr/Zifencei, M/S/U; per-class unit tests green. No F/D yet — see next item.)*
 - [ ] Implement F/D floating-point extensions. *(Required for Debian lp64d userspace; hard-fp CSR state, NaN-boxing, riscv-tests fp suites.)*
-- [ ] Implement guest memory. *(RAM with bounds-checked LE accessors; memory-map per docs/ARCHITECTURE.md §2.)*
-- [ ] Implement MMU. *(Sv39 walk, MXR/SUM, page-fault causes 12/13/15; Sv48 later.)*
-- [ ] Implement interrupt handling. *(PLIC claim/complete, CLINT, M/S delegation via mideleg/medeleg.)*
-- [ ] Implement virtual clocks and timers. *(CLINT mtime/mtimecmp driven by executed cycles; SBI TIME.)*
-- [ ] Implement the guest boot sequence. *(Reset vector, a0/a1 convention, kernel Image + ELF loaders, initrd, generated DTB.)*
-- [ ] Implement firmware path. *(OpenSBI fw_jump production path + built-in minimal SBI shim for development.)*
-- [ ] Implement virtual devices. *(NS16550A UART, VirtIO-MMIO block; virtio-net + virtio-gpu later phases.)*
-- [ ] Implement virtual block storage. *(BlockBackend trait; sector read/write/flush; descriptor-chain queue processing.)*
-- [ ] Implement a serial console. *(UART ↔ terminal byte queues + IRQ.)*
-- [ ] Implement framebuffer device. *(simple-framebuffer RAM carve-out + DTB node; host-side readback API.)*
-- [ ] Implement lifecycle management. *(Created→Ready→Running→Paused→Halted transitions, error on illegal transition.)*
+- [x] Implement guest memory. *(RAM with bounds-checked LE accessors; memory-map per docs/ARCHITECTURE.md §2.)*
+- [x] Implement MMU. *(Sv39 unit-verified incl. WARL rejection of Sv48; Sv48 still TODO under validation item.)*
+- [x] Implement interrupt handling. *(PLIC/CLINT/delegation unit-verified; in-guest validation pending kernel.)*
+- [x] Implement virtual clocks and timers. *(CLINT mtime/mtimecmp driven by executed cycles; SBI TIME.)*
+- [ ] Implement the guest boot sequence. *(Loader/DTB/reset path unit-verified incl. end-to-end tiny S-mode guest→SBI print→poweroff; unchecked until the real OpenSBI→kernel path runs.)*
+- [ ] Implement firmware path. *(fw_jump ELF loading + labelled built-in SBI fallback implemented & unit-tested; real OpenSBI binary boot pending guest CI.)*
+- [x] Implement virtual devices. *(UART + VirtIO-MMIO block unit-verified; virtio-net/gpu in later phases.)*
+- [x] Implement virtual block storage. *(BlockBackend trait; sector read/write/flush; descriptor-chain queue processing.)*
+- [x] Implement a serial console. *(UART ↔ terminal byte queues + IRQ.)*
+- [x] Implement framebuffer device. *(simple-framebuffer carve-out + DTB; guest-driven validation pending kernel.)*
+- [x] Implement lifecycle management. *(Created→Ready→Running→Paused→Halted transitions, error on illegal transition.)*
 - [ ] Validate against riscv-tests / official compliance vectors.
 - [ ] Validate the complete VM execution path. *(Boot OpenSBI→kernel on native test harness before any browser claim.)*
 
 ## Phase 3 — WASM Runtime
-- [ ] Compile the runtime to WASM. *(wasm32-unknown-unknown in CI.)*
-- [ ] Implement Rust/TypeScript bindings. *(crates/wasmnux-wasm via wasm-bindgen.)*
-- [ ] Implement initialization and shutdown.
-- [ ] Implement Web Worker integration. *(web/src/worker.ts + typed message protocol with runtime validation.)*
+- [x] Compile the runtime to WASM. *(CI release build.)*
+- [x] Implement Rust/TypeScript bindings. *(wasm-bindgen Machine; e2e proves instantiation in Chromium.)*
+- [x] Implement initialization and shutdown. *(Machine lifecycle API + worker handshake.)*
+- [x] Implement Web Worker integration. *(Validated protocol; e2e drives the real worker.)*
 - [ ] Implement memory management. *(Bounded RAM config; WASM memory accounting surfaced to UI.)*
-- [ ] Implement runtime error handling. *(VmError → typed JS errors; no silent traps.)*
+- [x] Implement runtime error handling.
 - [ ] Implement threaded execution where permitted. *(SharedArrayBuffer detection; single-threaded fallback is the default.)*
-- [ ] Validate browser execution. *(Playwright in CI: instantiate module, run RV64 test program, assert UART output.)*
+- [ ] Validate browser execution. *(Module instantiates in real Chromium via Playwright ✓; RV64-program-in-browser assertion lands with the first bootable guest — remains open.)*
 
 ## Phase 4 — Persistent Virtual Storage
-- [ ] Implement the storage abstraction. *(ChunkStore interface: OPFS, IndexedDB, in-memory backends.)*
-- [ ] Implement OPFS integration.
-- [ ] Implement IndexedDB metadata.
-- [ ] Implement persistent disk management. *(SparseDisk: 64 KiB chunks, CRC-32, dirty tracking, configurable capacity.)*
-- [ ] Implement crash-consistent updates. *(Chunk write + manifest generation flip; CRC verification on load.)*
-- [ ] Implement copy-on-write snapshots per profile.
-- [ ] Implement quota handling. *(navigator.storage.estimate/persist surfaced in UI; graceful QuotaExceeded path.)*
-- [ ] Implement backup and restoration. *(Whole-disk export/import with header + per-chunk CRC validation.)*
-- [ ] Implement import/export. *(Binary format validated against path traversal / oversize / corrupt input.)*
+- [x] Implement the storage abstraction.
+- [x] Implement OPFS integration. *(e2e: storeKind=opfs in Chromium; persistence across reload verified.)*
+- [x] Implement IndexedDB metadata. *(Fallback backend implemented; OPFS is the exercised path in e2e.)*
+- [x] Implement persistent disk management.
+- [x] Implement crash-consistent updates. *(Manifest-flip design + unflushed-write crash test.)*
+- [x] Implement copy-on-write snapshots per profile. *(Unit + e2e restore/isolation/reset.)*
+- [ ] Implement quota handling. *(estimate/persist surfaced in UI ✓; graceful QuotaExceeded *behaviour* not yet test-proven — open.)*
+- [x] Implement backup and restoration.
+- [x] Implement import/export. *(Validation unit-tested.)*
 - [ ] Implement async block bridge. *(Worker ChunkStore directly behind VirtIO, replacing v1 whole-image load/export.)*
-- [ ] Test complete browser restart persistence. *(Playwright: write via guest or disk API → reload → context restart → verify bytes.)*
+- [ ] Test complete browser restart persistence. *(Page-reload persistence PROVEN in e2e ✓; full browser-process restart evidence still required.)*
 
 ## Phase 5 — Vanilla Linux
 - [ ] Retrieve and verify the latest stable upstream Linux kernel. *(Script resolves kernel.org releases.json + PGP signature; resolved 7.3.1 on 2026-10-31.)*
@@ -98,28 +100,28 @@
 - [ ] Validate Debian operation after browser restart.
 
 ## Phase 7 — WebGPU and Graphics
-- [ ] Implement WebGPU initialization. *(Adapter/device request with feature detection and error surface.)*
-- [ ] Implement the graphics presentation pipeline. *(WGSL blit: BGRA/RGB565 conversion + scaling, storage-texture upload.)*
-- [ ] Integrate the selected virtual graphics device. *(simple-framebuffer readback; virtio-gpu stretch.)*
-- [ ] Implement framebuffer updates. *(Dirty detection; partial texture uploads.)*
+- [x] Implement WebGPU initialization. *(Feature-detected; headless CI takes the documented fallback path.)*
+- [x] Implement the graphics presentation pipeline. *(WGSL blit implemented; pixel swizzle unit-tested; GPU-path browser validation pending real adapter.)*
+- [ ] Integrate the selected virtual graphics device. *(simple-framebuffer readback API ready; guest-visible validation pending kernel.)*
+- [x] Implement framebuffer updates. *(Full-frame uploads; dirty-region optimisation remains.)*
 - [ ] Implement resizing.
 - [ ] Implement resource cleanup.
 - [ ] Implement device-loss recovery.
-- [ ] Implement a fallback renderer. *(Canvas 2D ImageData path, Linux fully usable without WebGPU.)*
-- [ ] Validate rendering on real browsers. *(Playwright Chromium: renderer pattern + guest framebuffer; WebGPU-disabled run.)*
+- [x] Implement a fallback renderer. *(Canvas2D; e2e-verified with screenshot diff in Chromium.)*
+- [ ] Validate rendering on real browsers. *(Chromium fallback path ✓ via Playwright; WebGPU adapter + Firefox runs pending.)*
 
 ## Phase 8 — Browser Interface
-- [ ] Implement the Linux profile selector. *(Vanilla / Debian, isolated state.)*
-- [ ] Implement VM controls. *(Boot/pause/reboot/poweroff/reset-profile; no fake boot when guest assets are absent — the UI must say what is missing and how to build/import it.)*
-- [ ] Implement the interactive terminal. *(xterm.js wired to guest UART byte stream only.)*
+- [x] Implement the Linux profile selector. *(Isolated profiles; e2e isolation verified.)*
+- [x] Implement VM controls. *(Honest boot blocking enumerates every reason; e2e asserts no fake boot.)*
+- [ ] Implement the interactive terminal. *(xterm wired to UART queues; guest-driven proof pending kernel boot.)*
 - [ ] Implement keyboard handling.
 - [ ] Implement clipboard integration. *(Browser-permission gated copy/paste.)*
 - [ ] Implement terminal resizing.
-- [ ] Implement disk and memory information. *(storage.estimate + profile disk usage + RAM config.)*
-- [ ] Implement boot diagnostics. *(Kernel log pane = raw UART stream; VM state + last error.)*
-- [ ] Implement snapshot management.
-- [ ] Implement error reporting. *(No unhandled rejections; errors rendered with remediation.)*
-- [ ] Implement PWA packaging. *(Manifest + service worker caching the app shell only, never guest disks.)*
+- [x] Implement disk and memory information.
+- [x] Implement boot diagnostics. *(Boot-blocker list, VM state, app log; UART pane is the raw guest stream.)*
+- [x] Implement snapshot management. *(Create/restore/delete; e2e-covered.)*
+- [x] Implement error reporting. *(run() wrapper + status/log rendering; no silent failures observed in e2e.)*
+- [ ] Implement PWA packaging. *(Manifest + service worker written; offline-startup verification pending Phase 12.)*
 
 ## Phase 9 — Networking
 - [ ] Evaluate browser networking restrictions. *(No raw TCP/UDP/DNS for pages — documented in docs/ARCHITECTURE.md §5.)*
@@ -133,29 +135,29 @@
 
 ## Phase 10 — Security and Reliability
 - [ ] Audit the WASM boundary. *(docs/SECURITY.md: guest fully untrusted; only virtual devices cross the boundary.)*
-- [ ] Audit worker communication. *(Runtime-validated message schemas.)*
-- [ ] Audit disk imports. *(Size caps, CRC, no filesystem path use of guest-controlled strings.)*
+- [x] Audit worker communication. *(Runtime schemas reject malformed messages; unit-tested.)*
+- [x] Audit disk imports. *(Size/CRC/bare-filename validation; unit-tested.)*
 - [ ] Audit filesystem operations.
 - [ ] Audit external dependencies. *(cargo audit + npm audit in CI; docs/DEPENDENCIES.md.)*
-- [ ] Test crash recovery. *(Kill tab mid-write → CRC-checked manifest recovers last consistent generation.)*
-- [ ] Test invalid input. *(Corrupt images, oversize imports, malformed worker messages.)*
+- [ ] Test crash recovery. *(ChunkStore-layer crash model is unit-proven; kill-tab mid-write browser test pending.)*
+- [ ] Test invalid input. *(Unit level ✓ (corrupt chunk/CRC, malformed messages); browser-level fuzzing pending.)*
 - [ ] Test storage exhaustion.
 - [ ] Test resource cleanup. *(Repeated boot/shutdown cycles; listener + GPU resource accounting.)*
-- [ ] Verify isolation between Linux profiles. *(Separate OPFS paths/IDB keys; reset-one-keeps-other test.)*
+- [x] Verify isolation between Linux profiles. *(e2e: reset-vanilla keeps Debian data intact.)*
 
 ## Phase 11 — Comprehensive Testing
-- [ ] Complete Rust tests. *(cargo fmt --check, clippy -D warnings, cargo test — CI.)*
-- [ ] Complete TypeScript tests. *(tsc strict, vitest — local + CI.)*
-- [ ] Complete WASM tests. *(CI build + Playwright instantiation test.)*
+- [x] Complete Rust tests. *(fmt/clippy -D warnings/40 tests green in CI for the current core scope.)*
+- [x] Complete TypeScript tests. *(tsc strict + ESLint + vitest 28/28.)*
+- [ ] Complete WASM tests. *(CI build + Chromium instantiation ✓; in-browser guest execution pending.)*
 - [ ] Complete kernel boot tests. *(Native harness: OpenSBI→7.3.x→shell; then browser.)*
-- [ ] Complete BusyBox tests. *(Every Mission-§3 applet behaviour-tested in-guest.)*
+- [ ] Complete BusyBox tests. *(Harness itself validated on host BusyBox 40/0/3; riscv64/in-guest execution pending guest CI.)*
 - [ ] Complete Debian tests. *(boot/login/dpkg/apt/persistence per Mission §8F.)*
-- [ ] Complete storage tests. *(CRUD, snapshots, import/export, quota, interrupted-write recovery.)*
+- [ ] Complete storage tests. *(CRUD/snapshots/import-export/interrupted-write covered at unit + e2e level; quota + browser-restart cases open.)*
 - [ ] Complete WebGPU tests. *(Enabled + disabled configurations.)*
-- [ ] Complete browser integration tests. *(Playwright.)*
+- [x] Complete browser integration tests. *(Playwright suite green in CI for app-level scope.)*
 - [ ] Complete end-to-end tests. *(Mission §8I 16-step workflow, unabridged.)*
-- [ ] Run regression tests.
-- [ ] Produce the final evidence report. *(docs/TEST-REPORT.md, maintained continuously.)*
+- [x] Run regression tests. *(Full matrix green on every push; each fixed bug carries a regression test — see TEST-REPORT failure history.)*
+- [ ] Produce the final evidence report. *(Maintained continuously in docs/TEST-REPORT.md; 'final' at release.)*
 - [ ] Add reproducible performance benchmarks. *(Boot time, MIPS estimate, disk throughput, terminal latency — measured, never invented.)*
 
 ## Phase 12 — Release Readiness
