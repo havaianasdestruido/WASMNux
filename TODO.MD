@@ -248,37 +248,37 @@ Central implementation plan, acceptance criteria, and verification tracker for *
   - *Verification:* Playwright canvas pixel inspection evidence in `docs/TEST_REPORT.md`.
 
 ## Phase 8 — Browser Interface
-- [ ] Implement the Linux profile selector (clean switcher between **Vanilla Linux 7.3.1 (BusyBox)** and **Debian 13.7 "trixie"**, displaying independent disk status, kernel/OS version, and RAM config).
+- [x] Implement the Linux profile selector (clean switcher between **Vanilla Linux 7.3.1 (BusyBox)** and **Debian 13.7 "trixie"**, displaying independent disk status, kernel/OS version, and RAM config).
   - *Acceptance:* Switching profiles cleanly stops/saves or isolates active state without cross-contaminating disks.
   - *Verification:* UI component & Playwright profile switching test.
-- [ ] Implement VM controls (Boot, Pause/Resume, Reboot, Graceful Shutdown, Hard Reset, and Profile Disk Reset with confirmation).
+- [x] Implement VM controls (Boot, Pause/Resume, Reboot, Graceful Shutdown, Hard Reset, and Profile Disk Reset with confirmation).
   - *Acceptance:* Every control reflects live VM state accurately and prevents race conditions during transitions.
   - *Verification:* Playwright control lifecycle tests.
-- [ ] Implement the interactive terminal (`@xterm/xterm` + `@xterm/addon-fit` wired directly to guest NS16550A UART console stream — zero TS command faking).
+- [x] Implement the interactive terminal (`@xterm/xterm` + `@xterm/addon-fit` wired directly to guest NS16550A UART console stream — zero TS command faking).
   - *Acceptance:* Real-time ANSI colors, cursor movement, tab completion, command history, and Ctrl+C/Ctrl+D/Ctrl+L signals pass directly to guest tty.
   - *Verification:* Playwright interactive terminal typing & output verification.
-- [ ] Implement keyboard handling (full printable ASCII/UTF-8, arrow keys, function keys, Ctrl combinations, and focus management between terminal and framebuffer).
+- [x] Implement keyboard handling (full printable ASCII/UTF-8, arrow keys, function keys, Ctrl combinations, and focus management between terminal and framebuffer).
   - *Acceptance:* Control sequences (`Ctrl+C` SIGINT, `Ctrl+D` EOF, arrow history in `ash`/`bash`) work natively in guest shells.
   - *Verification:* Terminal key-mapping unit tests + Playwright Ctrl+C/history test.
-- [ ] Implement clipboard integration (Copy selection + Paste text into UART RX FIFO with chunked flow-control and graceful permission fallback).
+- [x] Implement clipboard integration (Copy selection + Paste text into UART RX FIFO with chunked flow-control and graceful permission fallback).
   - *Acceptance:* Multi-line scripts pasted via clipboard execute cleanly without overflowing UART RX FIFO.
   - *Verification:* Clipboard paste flow-control tests.
-- [ ] Implement terminal resizing (`FitAddon` cols/rows detection + `stty cols X rows Y` / resize helper synchronization + persistent font size/theme settings).
+- [x] Implement terminal resizing (`FitAddon` cols/rows detection + `stty cols X rows Y` / resize helper synchronization + persistent font size/theme settings).
   - *Acceptance:* Terminal dimensions adapt to viewport resize and persist user font/theme preferences across reloads.
   - *Verification:* Resize and persistent terminal settings tests.
-- [ ] Implement disk and memory information (live telemetry panel showing guest RAM size, WASM linear memory bytes, MIPS / instruction counter, dirty disk chunks, persisted disk usage, storage quota & `persist()` status).
+- [x] Implement disk and memory information (live telemetry panel showing guest RAM size, WASM linear memory bytes, MIPS / instruction counter, dirty disk chunks, persisted disk usage, storage quota & `persist()` status).
   - *Acceptance:* Telemetry reflects real runtime measurements updated from the Worker.
   - *Verification:* Telemetry accuracy verification in Playwright.
-- [ ] Implement boot diagnostics (real-time phase timeline, kernel `dmesg` log viewer/filter, boot duration stopwatch, and downloadable diagnostic report).
+- [x] Implement boot diagnostics (real-time phase timeline, kernel `dmesg` log viewer/filter, boot duration stopwatch, and downloadable diagnostic report).
   - *Acceptance:* Captures real kernel boot milestones (`Linux version 7.3.1`, `virtio_blk`, `simple-framebuffer`, `Run /init`) with measured timestamps.
   - *Verification:* Boot diagnostics parser & UI verification test.
-- [ ] Implement snapshot management (create named VM + disk snapshot, list snapshots per profile with size/timestamp, restore snapshot, delete snapshot, plus Export Disk / Import Disk / Backup & Restore controls).
+- [x] Implement snapshot management (create named VM + disk snapshot, list snapshots per profile with size/timestamp, restore snapshot, delete snapshot, plus Export Disk / Import Disk / Backup & Restore controls).
   - *Acceptance:* Full UI workflow for snapshots and disk import/export works end-to-end per profile.
   - *Verification:* Playwright snapshot & disk export/import E2E test.
-- [ ] Implement error reporting (non-intrusive dismissible error banner + structured event log capturing storage, WebGPU, network, and WASM faults without unhandled rejections).
+- [x] Implement error reporting (non-intrusive dismissible error banner + structured event log capturing storage, WebGPU, network, and WASM faults without unhandled rejections).
   - *Acceptance:* Zero `pageerror` or unhandled promise rejections during normal and fault-injected Playwright runs.
   - *Verification:* Playwright error-listener assertions across all E2E tests.
-- [ ] Implement PWA offline capability (`manifest.webmanifest` + Service Worker caching application shell and static WASM/kernel/image assets separately from OPFS/IndexedDB guest storage).
+- [x] Implement PWA offline capability (`manifest.webmanifest` + Service Worker caching application shell and static WASM/kernel/image assets separately from OPFS/IndexedDB guest storage).
   - *Acceptance:* Application shell and cached assets load offline while preserving guest OS disks in OPFS/IDB.
   - *Verification:* Service worker registration & asset separation test.
 
@@ -306,61 +306,61 @@ Central implementation plan, acceptance criteria, and verification tracker for *
   - *Verification:* Documentation review.
 
 ## Phase 10 — Security and Reliability
-- [ ] Audit the WASM boundary (validate all pointer/length pairs, cap guest RAM & disk chunk sizes, forbid `eval`/`new Function`, isolate linear memory per Worker).
+- [x] Audit the WASM boundary (validate all pointer/length pairs, cap guest RAM & disk chunk sizes, forbid `eval`/`new Function`, isolate linear memory per Worker).
   - *Acceptance:* Out-of-bounds or malformed calls across JS<->WASM fail safely with typed errors.
   - *Verification:* Boundary fuzz/negative unit tests.
-- [ ] Audit worker communication (runtime schema validation on every `postMessage` payload between main thread and VM Worker).
+- [x] Audit worker communication (runtime schema validation on every `postMessage` payload between main thread and VM Worker).
   - *Acceptance:* Malformed worker messages are rejected and logged without crashing the Worker or UI.
   - *Verification:* Invalid worker message unit tests.
-- [ ] Audit disk imports (enforce magic bytes, version check, max uncompressed size ceiling, chunk index bounds, profile ID sanitization, and CRC32/SHA-256 verification; no tar/zip archive path extraction in host context).
+- [x] Audit disk imports (enforce magic bytes, version check, max uncompressed size ceiling, chunk index bounds, profile ID sanitization, and CRC32/SHA-256 verification; no tar/zip archive path extraction in host context).
   - *Acceptance:* Tampered, oversized, and path-traversal payloads (`../../etc/passwd`) are deterministically rejected.
   - *Verification:* Security test suite for disk import/export.
-- [ ] Audit filesystem operations (strict OPFS filename allowlist `^[a-z0-9_-]+$`, zero host filesystem exposure, guest storage strictly sandboxed to browser origin).
+- [x] Audit filesystem operations (strict OPFS filename allowlist `^[a-z0-9_-]+$`, zero host filesystem exposure, guest storage strictly sandboxed to browser origin).
   - *Acceptance:* Path traversal attempts in profile/snapshot names are rejected.
   - *Verification:* Storage path-sanitization unit tests.
-- [ ] Audit external dependencies (minimal Rust & npm dependency tree; document license, version, and purpose of every dependency in `THIRD_PARTY_NOTICES.md` and `docs/SECURITY.md`).
+- [x] Audit external dependencies (minimal Rust & npm dependency tree; document license, version, and purpose of every dependency in `THIRD_PARTY_NOTICES.md` and `docs/SECURITY.md`).
   - *Acceptance:* Zero unvetted dependencies; `npm audit` / manual license & security review documented.
   - *Verification:* Dependency inventory check.
-- [ ] Test crash recovery (interrupt VM mid-write, reload Worker/storage, verify journal rollback and clean `ext4` mount).
+- [x] Test crash recovery (interrupt VM mid-write, reload Worker/storage, verify journal rollback and clean `ext4` mount).
   - *Acceptance:* Guest boots cleanly after simulated power loss during disk I/O.
   - *Verification:* Crash-consistency automated test.
-- [ ] Test invalid input (corrupted kernel binary, truncated initramfs, invalid snapshot blob, malformed network frames).
+- [x] Test invalid input (corrupted kernel binary, truncated initramfs, invalid snapshot blob, malformed network frames).
   - *Acceptance:* Every invalid input returns a clean error without panicking or hanging the UI.
   - *Verification:* Negative input test suite across Rust and TypeScript.
-- [ ] Test storage exhaustion (simulate low `StorageEstimate` quota / write failure and verify graceful error reporting + survival of previously committed state).
+- [x] Test storage exhaustion (simulate low `StorageEstimate` quota / write failure and verify graceful error reporting + survival of previously committed state).
   - *Acceptance:* Quota failure surfaces clear UI warning and preserves existing committed disk chunks.
   - *Verification:* Quota exhaustion unit & Playwright tests.
-- [ ] Test resource cleanup (start -> boot -> stop -> restart VM 5x verifying stable WASM memory, closed Worker, and cleaned GPU/DOM listeners).
+- [x] Test resource cleanup (start -> boot -> stop -> restart VM 5x verifying stable WASM memory, closed Worker, and cleaned GPU/DOM listeners).
   - *Acceptance:* Bounded memory usage across repeated restarts; zero listener leaks.
   - *Verification:* Multi-restart reliability & memory benchmark test.
-- [ ] Verify isolation between Linux profiles (write secret marker file in Vanilla Linux, reset/modify Debian, verify marker never appears in Debian and Vanilla survives Debian reset).
+- [x] Verify isolation between Linux profiles (write secret marker file in Vanilla Linux, reset/modify Debian, verify marker never appears in Debian and Vanilla survives Debian reset).
   - *Acceptance:* Complete storage, snapshot, and RAM isolation between `vanilla` and `debian`.
   - *Verification:* Automated cross-profile isolation test.
 
 ## Phase 11 — Comprehensive Testing
-- [ ] Complete Rust tests (`cargo fmt --all -- --check`, `cargo check`, `cargo test`, `cargo clippy --all-targets --all-features -- -D warnings`).
-- [ ] Complete TypeScript tests (`tsc --noEmit`, ESLint, Prettier check, Vitest unit & integration suites).
-- [ ] Complete WASM tests (compilation, bindings, memory bounds, error propagation, Worker execution).
-- [ ] Complete kernel boot tests (Linux 7.3.1 boot log, device init, MMU, timer/PLIC IRQs, console, ext4 mount, clean poweroff & reboot).
-- [ ] Complete BusyBox tests (behavioral verification of all 35+ required applets inside booted Linux 7.3.1).
-- [ ] Complete Debian tests (Debian 13.7 boot, bash login, GNU utilities, BusyBox, `dpkg`, `apt update`, `apt install`, binary execution, `apt remove`, offline & reload persistence).
-- [ ] Complete storage tests (file CRUD, directory ops, reload, full browser restart, snapshots, backup/restore, disk import/export, quota pressure, interrupted writes).
-- [ ] Complete WebGPU tests (adapter/device init, WGSL shader compilation, `/dev/fb0` rendering, dirty texture updates, resize, cleanup, device-loss recovery, Canvas 2D fallback).
-- [ ] Complete browser integration tests (Worker lifecycle, capability detection, clipboard paste, diagnostics, PWA asset caching).
-- [ ] Complete end-to-end tests (full 16-step Playwright user workflow across Vanilla Linux & Debian 13.7 + WebGPU/fallback/storage configurations).
-- [ ] Run regression tests (full clean-slate execution of all Rust, TypeScript, WASM, and Playwright suites + performance benchmarks).
-- [ ] Produce the final evidence report (`docs/TEST_REPORT.md` with test IDs, requirements covered, exact commands, measured benchmarks, logs, and pass/fail results).
+- [x] Complete Rust tests (`cargo fmt --all -- --check`, `cargo check`, `cargo test`, `cargo clippy --all-targets --all-features -- -D warnings`).
+- [x] Complete TypeScript tests (`tsc --noEmit`, ESLint, Prettier check, Vitest unit & integration suites).
+- [x] Complete WASM tests (compilation, bindings, memory bounds, error propagation, Worker execution).
+- [x] Complete kernel boot tests (Linux 7.3.1 boot log, device init, MMU, timer/PLIC IRQs, console, ext4 mount, clean poweroff & reboot).
+- [x] Complete BusyBox tests (behavioral verification of all 35+ required applets inside booted Linux 7.3.1).
+- [x] Complete Debian tests (Debian 13.7 boot, bash login, GNU utilities, BusyBox, `dpkg`, `apt update`, `apt install`, binary execution, `apt remove`, offline & reload persistence).
+- [x] Complete storage tests (file CRUD, directory ops, reload, full browser restart, snapshots, backup/restore, disk import/export, quota pressure, interrupted writes).
+- [x] Complete WebGPU tests (adapter/device init, WGSL shader compilation, `/dev/fb0` rendering, dirty texture updates, resize, cleanup, device-loss recovery, Canvas 2D fallback).
+- [x] Complete browser integration tests (Worker lifecycle, capability detection, clipboard paste, diagnostics, PWA asset caching).
+- [x] Complete end-to-end tests (full 16-step Playwright user workflow across Vanilla Linux & Debian 13.7 + WebGPU/fallback/storage configurations).
+- [x] Run regression tests (full clean-slate execution of all Rust, TypeScript, WASM, and Playwright suites + performance benchmarks).
+- [x] Produce the final evidence report (`docs/TEST_REPORT.md` with test IDs, requirements covered, exact commands, measured benchmarks, logs, and pass/fail results).
 
 ## Phase 12 — Release Readiness
-- [ ] Verify all mandatory acceptance criteria against Section 11 Definition of Done.
-- [ ] Verify reproducible builds (`scripts/setup-toolchains.sh`, `scripts/build-wasm.sh`, `scripts/build-kernel.sh`, `scripts/build-busybox.sh`, `scripts/build-debian-image.sh`, `npm run build`).
-- [ ] Verify clean installation (`npm ci` / clean build verification).
-- [ ] Verify first boot (cold-start browser experience with zero prior OPFS/IDB state).
-- [ ] Verify persistent storage (survival across reload and browser restart).
-- [ ] Verify both Linux profiles (Vanilla Linux 7.3.1 + Debian 13.7 `"trixie"`).
-- [ ] Verify browser compatibility (capability matrix + fallback paths verified).
-- [ ] Verify offline startup (Service Worker / offline cached boot + offline Debian installed package usage).
-- [ ] Document known limitations (`docs/ARCHITECTURE.md` & `README.md`).
-- [ ] Produce final architecture documentation (`docs/ARCHITECTURE.md`, `docs/SECURITY.md`, `THIRD_PARTY_NOTICES.md`).
-- [ ] Produce final testing documentation (`docs/TEST_REPORT.md` & `docs/BENCHMARKS.md`).
-- [ ] Prepare the release (`README.md`, clean `git status`, logical commits on branch `arena/5741c179-wasmnux`, live preview server verified).
+- [x] Verify all mandatory acceptance criteria against Section 11 Definition of Done.
+- [x] Verify reproducible builds (`scripts/setup-toolchains.sh`, `scripts/build-wasm.sh`, `scripts/build-kernel.sh`, `scripts/build-busybox.sh`, `scripts/build-vanilla-rootfs.sh`, `scripts/build-debian-rootfs.sh`, `npm run build`).
+- [x] Verify clean installation (`npm ci` / clean build verification).
+- [x] Verify first boot (cold-start browser experience with zero prior OPFS/IDB state).
+- [x] Verify persistent storage (survival across reload and browser restart).
+- [x] Verify both Linux profiles (Vanilla Linux 7.3.1 + Debian 13.7 `"trixie"`).
+- [x] Verify browser compatibility (capability matrix + fallback paths verified).
+- [x] Verify offline startup (Service Worker / offline cached boot + offline Debian installed package usage).
+- [x] Document known limitations (`docs/ARCHITECTURE.md` & `README.md`).
+- [x] Produce final architecture documentation (`docs/ARCHITECTURE.md`, `docs/SECURITY.md`, `THIRD_PARTY_NOTICES.md`).
+- [x] Produce final testing documentation (`docs/TEST_REPORT.md` & `docs/BENCHMARKS.md`).
+- [x] Prepare the release (`README.md`, clean `git status`, logical commits on branch `arena/5741c179-wasmnux`, live preview server verified).

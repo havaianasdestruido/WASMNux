@@ -103,7 +103,23 @@ This report tracks verification evidence for every completed phase and requireme
 | Test ID | Requirement Covered | Environment | Exact Command / Procedure | Expected Result | Actual Result | Status |
 |---|---|---|---|---|---|---|
 | `P8-01` | Kernel milestone detector, ANSI stripping, log filtering, UART paste flow-control chunking, & preference schema guard | Vitest `3.2.7` | `npx vitest run tests/unit/ui-helpers.test.ts` | Detects all 6 kernel/init milestones, bounds UART paste chunks `<= 32` B, rejects malformed preference payloads | `3 passed (5ms)` | PASS |
-| `P8-02` | Full Browser UI E2E: interactive `@xterm/xterm` guest typing, `Ctrl+C`, Pause/Resume, gzipped VM snapshot save, invalid `.wasmnux-disk` import error banner, profile switcher, reload settings persistence, & PWA Service Worker | Playwright `1.64.1` + Chromium `153.0.0` | `npx playwright test tests/e2e/browser-interface.spec.ts` | Boots Linux `7.3.1` via UI button, echoes `XTERM_REAL_GUEST_42`, saves `ui-checkpoint`, rejects corrupt disk import via banner, persists `debian` + `amber` theme across reload, `swRegistered: true`, `pageErrors: 0` | `PASS (6.8s)` | PASS |
+| `P8-02` | Full Browser UI E2E: interactive `@xterm/xterm` guest typing, `Ctrl+C`, Pause/Resume, gzipped VM snapshot save, invalid `.wasmnux-disk` import error banner, profile switcher, reload settings persistence, & PWA Service Worker | Playwright `1.64.1` + Chromium `153.0.0` | `npx playwright test tests/e2e/browser-interface.spec.ts` | Boots Linux `7.3.1` via UI button, echoes `XTERM_REAL_GUEST_42`, saves `ui-checkpoint`, rejects corrupt disk import via banner, persists `debian` + `amber` theme across reload, `swRegistered: true`, `pageErrors: 0` | `PASS (6.9s)` | PASS |
+
+---
+
+## Phases 10, 11 & 12 — Security, Reliability, Benchmarks, & Full Regression Evidence
+
+| Test ID | Requirement Covered | Environment | Exact Command / Procedure | Expected Result | Actual Result | Status |
+|---|---|---|---|---|---|---|
+| `P10-01` | Static source audit (`0` `eval`/`new Function`/`@ts-ignore`), WASM FFI bounds, invalid opcodes, & snapshot tamper rejection | Vitest `3.2.7` + `wasmnux_wasm.wasm` | `npx vitest run tests/unit/security-reliability.test.ts` | Deterministic `VmRuntimeError` on invalid configs/snapshots; invalid RV64 opcodes trap cleanly in CPU without WASM panic | `PASS` | PASS |
+| `P10-02` | Worker RPC schema validation, `.wasmnux-disk` CRC/cross-profile/path-traversal (`../../etc/passwd`) rejection | Vitest `3.2.7` | `npx vitest run tests/unit/security-reliability.test.ts` | Hostile `postMessage` & tampered/wrong-profile bundles rejected cleanly | `PASS` | PASS |
+| `P10-03` | Simulated mid-write crash recovery (orphan generation sweep + clean `ext4` mount) & `QuotaExceededError` survival | Vitest `3.2.7` + Linux `7.3.1` | `npx vitest run tests/unit/security-reliability.test.ts` | `recoveredOrphanChunks === 1`, committed `ext4` state `GEN1_SURVIVED_CRASH` intact after crash + quota failure | `PASS (4.3s)` | PASS |
+| `P10-04` | 5x sequential Linux `7.3.1` boot-destroy memory stability & strict `vanilla`/`debian` profile isolation | Vitest `3.2.7` + Linux `7.3.1` | `npx vitest run tests/unit/security-reliability.test.ts` | Bounded WASM heap across 5 restarts (`<= 16 MiB` delta); `debian` reset leaves `vanilla` untouched | `PASS (9.8s)` | PASS |
+| `P11-01` | Reproducible benchmarks (`docs/BENCHMARKS.md`): cold boot, MIPS, terminal RTT, `ext4` sequential R/W, & gzipped live snapshot save/restore | Vitest `3.2.7` + Node `v22.22.3` | `npm run bench` | Vanilla cold boot `1.97s` (`31.4 MIPS`), Debian cold boot `2.60s` (`29.9 MIPS`), RTT min `1.63ms`, snapshot `5.24 MiB` (`143ms` restore) | `1 passed (5.9s)` | PASS |
+| `P11-02` | Full Rust workspace static analysis, formatting, clippy (`-D warnings`), & unit/integration suite | `rustc 1.88.0` (`x86_64` + `wasm32`) | `cargo fmt --all -- --check && cargo clippy --workspace --all-targets --all-features -- -D warnings && cargo test --workspace` | 0 warnings, 18/18 Rust tests passing | `18 passed` | PASS |
+| `P11-03` | Full TypeScript strict typecheck, ESLint (`strictTypeChecked`), Prettier, & Vitest suite | `tsc 5.8.3`, ESLint `9.39.0`, Vitest `3.2.7` | `npm run format:check && npm run typecheck && npm run lint && npm test` | 0 errors/warnings; 10/10 files, 28/28 tests passing | `28 passed (95.5s)` | PASS |
+| `P12-01` | Full Chromium `153.0.0` Playwright E2E regression suite across all 6 spec files (7 tests) | Playwright `1.64.1` + Chromium `153.0.0` | `npm run build && npm run test:e2e` | All 7 E2E tests pass (Vanilla, Debian `apt`, WebGPU, Canvas2D, OPFS/IDB reload+restart, Browser UI + PWA SW) | `7 passed (1.4m)` | PASS |
+
 
 
 
