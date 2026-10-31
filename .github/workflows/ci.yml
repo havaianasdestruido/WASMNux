@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  rust:
+    name: Rust core (fmt, clippy, test, wasm build)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust (pinned stable + wasm target)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: Format check
+        run: cargo fmt --all -- --check
+      - name: Clippy (warnings are errors)
+        run: cargo clippy --all-targets --all-features -- -D warnings
+      - name: Unit + integration tests
+        run: cargo test --workspace --all-features
+      - name: WebAssembly build
+        run: cargo build -p wasmnux-wasm --target wasm32-unknown-unknown --release
+      - name: Generate wasm-bindgen JS package
+        run: |
+          cargo install wasm-bindgen-cli --version 0.2.100 --locked || cargo install wasm-bindgen-cli --locked
+          mkdir -p web/src/wasm
+          wasm-bindgen --target web --out-dir web/src/wasm \
+            target/wasm32-unknown-unknown/release/wasmnux_wasm.wasm
+          ls -l web/src/wasm
+      - name: Upload WASM package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: wasmnux-wasm-pkg
+          path: web/src/wasm
+          if-no-files-found: error
