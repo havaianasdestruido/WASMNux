@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="theme-color" content="#101418" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <title>WASMNux — Linux in your browser</title>
+  </head>
+  <body>
+    <div id="app">
+      <header>
+        <div>
+          <h1>WASMNux</h1>
+          <p>Real Linux. Your browser. No remote shell.</p>
+        </div>
+        <span id="status" role="status">Ready</span>
+      </header>
+      <section class="controls">
+        <label
+          >Profile
+          <select id="profile">
+            <option value="vanilla">Linux 7.3.1 · BusyBox</option>
+            <option value="debian">Debian 13.7 · dpkg/apt</option>
+          </select></label
+        ><button id="boot">Boot</button><button id="pause" disabled>Pause</button
+        ><button id="shutdown" disabled>Shut down</button><button id="export" disabled>Export disk</button
+        ><label class="import">Import disk<input id="import" type="file" accept=".img" /></label
+        ><button id="reset">Reset profile</button><button id="snapshot" disabled>Snapshot</button
+        ><select id="snapshots" disabled aria-label="Snapshots"></select
+        ><button id="restore" disabled>Restore</button
+        ><button id="delete-snapshot" disabled>Delete snapshot</button>
+      </section>
+      <main>
+        <section class="terminal">
+          <h2>Serial console</h2>
+          <div id="terminal"></div>
+        </section>
+        <aside>
+          <h2>Runtime</h2>
+          <dl>
+            <dt>Execution</dt>
+            <dd>RV64GC interpreter in WASM</dd>
+            <dt>Guest kernel</dt>
+            <dd>Upstream Linux 7.3.1</dd>
+            <dt>Storage</dt>
+            <dd id="storage">OPFS + write-ahead journal</dd>
+            <dt>Retired instructions</dt>
+            <dd id="retired">0</dd>
+            <dt>Worker slice</dt>
+            <dd id="slice">—</dd>
+          </dl>
+          <p class="notice">
+            The CPU is emulated, not hardware-accelerated. Guest data stays on this device. Keep a backup:
+            browser storage can be evicted.
+          </p>
+          <h2>Graphics</h2>
+          <canvas id="display" width="640" height="400"></canvas>
+          <p id="graphics">Framebuffer device not implemented yet.</p>
+          <h2>Networking</h2>
+          <p>Offline guest. Browser-safe networking is not implemented.</p>
+        </aside>
+      </main>
+      <footer>
+        <span id="capabilities">Checking capabilities…</span
+        ><button id="persist">Request persistent storage</button>
+      </footer>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

@@ -1,0 +1,8 @@
+{
+  "Image": "ec16eaba14a2139966e38d678d1ef9bdb0f73b99c923671b2ef3328c6eeca477",
+  "debian.imgz": "3e530ec9268443779c89c9658548bd269ac1f0630f03be38c218df904b77a7c9",
+  "fw_jump.bin": "eb0ff2713afa68785f0654b3171e0e2df0a99482ad86c5d6b8476f17ba6341c6",
+  "initramfs.cpio": "5ceddc2798c35e24fad4390b7f70fe7d2edae03cf71c6b94b56878b8cb3cd7cd",
+  "vanilla.imgz": "02ec1e8974da527e10ae3a554fa4dd33724579b428ff5c1e543ca11701e7b1f0",
+  "wasmnux_runtime.wasm": "0fa10ab0a07f1084ff7fccd929321972618f4dc489542d0d5aab5cbc94743152"
+}

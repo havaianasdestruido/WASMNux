@@ -1,0 +1,24 @@
+import { test, expect } from '@playwright/test';
+test('real Linux boots in WASM and guest file survives reload', async ({ browser }) => {
+  const context = await browser.newContext({ serviceWorkers: 'block' });
+  const page = await context.newPage();
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Boot', exact: true }).click();
+  await expect(page.locator('#terminal')).toContainText('WASMNUX_PERSISTENT_ROOT_READY', { timeout: 280000 });
+  await page.locator('#terminal').click();
+  await page.keyboard.type('echo browser-ok > /root/browser.txt; sync');
+  await page.keyboard.press('Enter');
+  await expect(page.locator('#terminal')).toContainText('browser-ok', { timeout: 10000 });
+  await page.getByRole('button', { name: 'Shut down' }).click();
+  await expect(page.locator('#status')).toContainText('Guest powered off', { timeout: 10000 });
+  await page.reload();
+  await page.getByRole('button', { name: 'Boot', exact: true }).click();
+  await expect(page.locator('#terminal')).toContainText('WASMNUX_PERSISTENT_ROOT_READY', { timeout: 280000 });
+  await page.locator('#terminal').click();
+  await page.keyboard.type('cat /root/browser.txt');
+  await page.keyboard.press('Enter');
+  await expect(page.locator('#terminal')).toContainText('browser-ok', { timeout: 10000 });
+  expect(errors).toEqual([]);
+});

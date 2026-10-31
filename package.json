@@ -1,0 +1,50 @@
+{
+  "name": "wasmnux",
+  "version": "0.1.0",
+  "description": "Real Linux VM in a browser via Rust/WASM",
+  "directories": {
+    "doc": "docs",
+    "test": "tests"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build && node tools/hash-assets.mjs dist/assets",
+    "preview": "vite preview --host 0.0.0.0",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "format:check": "prettier --check web/src web/tests *.ts *.json",
+    "test": "vitest run",
+    "test:e2e": "playwright test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/havaianasdestruido/WASMNux.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "Apache-2.0",
+  "bugs": {
+    "url": "https://github.com/havaianasdestruido/WASMNux/issues"
+  },
+  "homepage": "https://github.com/havaianasdestruido/WASMNux#readme",
+  "dependencies": {
+    "@xterm/addon-fit": "0.10.0",
+    "@xterm/xterm": "5.5.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "9.39.5",
+    "@playwright/test": "1.64.1",
+    "@sparticuz/chromium": "153.0.0",
+    "@types/node": "26.6.6",
+    "@webgpu/types": "0.1.74",
+    "eslint": "9.39.5",
+    "fake-indexeddb": "6.2.7",
+    "prettier": "3.9.10",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.72.1",
+    "vite": "8.3.5",
+    "vitest": "5.0.5"
+  },
+  "type": "module",
+  "private": true
+}
