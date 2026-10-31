@@ -205,7 +205,7 @@ mod tests {
     fn plic_with_uart_enabled() -> Plic {
         let mut plic = Plic::new();
         plic.write(10 * 4, 4, 5).expect("priority (UART = 5)");
-        plic.write(1 * 4, 4, 3).expect("priority (virtio = 3)");
+        plic.write(4, 4, 3).expect("priority (virtio = 3)");
         plic.write(ENABLE_S, 4, (1 << 10) | (1 << 1))
             .expect("enable");
         plic

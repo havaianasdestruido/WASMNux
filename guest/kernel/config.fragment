@@ -1,0 +1,44 @@
+# WASMNux RISC-V `virt` kernel configuration fragment.
+# Applied on top of upstream `defconfig` (ARCH=riscv) via merge_config.sh.
+# Every option here exists because our machine model requires it; see
+# docs/ARCHITECTURE.md for the memory map and device list.
+
+# ---- Console (NS16550 UART at 0x10000000) -----------------------------------
+CONFIG_SERIAL_8250=y
+CONFIG_SERIAL_8250_CONSOLE=y
+CONFIG_SERIAL_OF_PLATFORM=y
+CONFIG_EARLY_PRINTK=y
+CONFIG_PRINTK_TIME=y
+
+# ---- VirtIO-MMIO block device (0x10001000) ----------------------------------
+CONFIG_VIRTIO=y
+CONFIG_VIRTIO_MMIO=y
+CONFIG_VIRTIO_BLK=y
+
+# ---- Initramfs + root filesystems -------------------------------------------
+CONFIG_BLK_DEV_INITRD=y
+CONFIG_RD_GZIP=y
+CONFIG_EXT4_FS=y
+CONFIG_TMPFS=y
+CONFIG_DEVTMPFS=y
+CONFIG_DEVTMPFS_MOUNT=y
+
+# ---- simple-framebuffer (guest display presented via WebGPU/Canvas2D) -------
+CONFIG_FB=y
+CONFIG_FB_SIMPLE=y
+CONFIG_FRAMEBUFFER_CONSOLE=y
+# CONFIG_LOGO is not set
+
+# ---- Match the emulator's honestly-advertised ISA (RV64IMAC, no F/D yet) ----
+# With CONFIG_FPU off and an F-less DTB `riscv,isa` string, the kernel never
+# touches FP state. Revisit when Phase-2 F/D support lands (Debian lp64d).
+# CONFIG_FPU is not set
+
+# Vanilla and Debian profiles boot /sbin/init directly from the VirtIO root
+# or execute the BusyBox /init, so loadable modules are intentionally off:
+# one less moving part across emulator/kernel upgrades.
+# CONFIG_MODULES is not set
+
+# Deterministic, small, debug-friendly kernel for an interpreter-speed guest.
+CONFIG_CC_OPTIMIZE_FOR_SIZE=y
+CONFIG_SLUB_TINY=y

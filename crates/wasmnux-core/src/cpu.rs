@@ -1454,7 +1454,7 @@ mod tests {
             addi(1, 1, 0x400),
             addi(2, 0, -5),
             // sb x2, 0(x1)
-            ((2 << 20) | (1 << 15) | (0 << 12) | (0 << 7) | 0x23),
+            ((2 << 20) | (1 << 15) | 0x23),
             // lb x3, 0(x1)
             i_type(0, 1, 0, 3, 0x03),
             // lbu x4, 0(x1)
@@ -1474,7 +1474,7 @@ mod tests {
     #[test]
     fn branch_skips_instructions() {
         // x1=1; beq x1,x1,+8 (skip next); x1=99; x2=7
-        let beq = ((1 << 20) | (1 << 15) | (0b000 << 12) | (0b0100 << 8) | 0x63) | (0 << 31);
+        let beq = (1 << 20) | (1 << 15) | (0b0100 << 8) | 0x63;
         let program = [addi(1, 0, 1), beq, addi(1, 0, 99), addi(2, 0, 7)];
         let (mut cpu, mut bus) = machine_with(&program);
         run(&mut cpu, &mut bus, 3);

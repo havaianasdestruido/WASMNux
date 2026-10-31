@@ -1,0 +1,77 @@
+#!/bin/sh
+# /init for the Vanilla Linux profile (BusyBox initramfs).
+#
+# Boot model:
+#  - The initramfs is the live root filesystem.
+#  - The VirtIO disk (/dev/vda) is the persistent data volume, mounted at
+#    /persist. If it contains a full system (/init or /sbin/init), we
+#    switch_root into it instead, so users can promote the data disk to a
+#    real root filesystem.
+#  - Everything here is a genuine guest: this script runs under the real
+#    kernel in the emulator; the browser never sees or fakes any of it.
+
+export PATH=/bin:/sbin:/usr/bin:/usr/sbin
+export HOME=/root
+export TERM="${TERM:-vt100}"
+
+mount -t proc proc /proc
+mount -t sysfs sysfs /sys
+mount -t devtmpfs devtmpfs /dev
+mkdir -p /dev/pts /dev/shm
+mount -t devpts devpts /dev/pts
+mount -t tmpfs tmpfs /dev/shm
+
+hostname wasmnux-vanilla 2>/dev/null
+ip link set lo up 2>/dev/null
+
+echo
+echo "=== WASMNux Vanilla Linux ==="
+uname -a
+echo "Kernel command line: $(cat /proc/cmdline)"
+
+# --- Persistent volume ------------------------------------------------------
+PERSIST_MOUNTED=0
+if [ -b /dev/vda ]; then
+  mkdir -p /persist
+  if mount -t ext4 /dev/vda /persist 2>/dev/null || mount /dev/vda /persist 2>/dev/null; then
+    PERSIST_MOUNTED=1
+    echo "Persistent disk /dev/vda mounted at /persist"
+  else
+    echo "No filesystem on /dev/vda yet; formatting ext2 (via BusyBox mke2fs)..."
+    if mke2fs -t ext2 -F /dev/vda >/dev/null 2>&1 && mount /dev/vda /persist 2>/dev/null; then
+      PERSIST_MOUNTED=1
+      echo "Formatted and mounted /dev/vda at /persist"
+    else
+      echo "WARNING: could not format/mount /dev/vda; session will be ephemeral!"
+    fi
+  fi
+fi
+
+if [ "${PERSIST_MOUNTED}" = "1" ]; then
+  # Full-system promotion: a real root filesystem on the data disk wins.
+  if [ -x /persist/sbin/init ] || [ -x /persist/init ]; then
+    echo "Found a system on /dev/vda; switching root..."
+    for d in proc sys dev; do
+      mkdir -p "/persist/${d}"
+      mount --move "/${d}" "/persist/${d}" 2>/dev/null
+    done
+    exec switch_root /persist /sbin/init
+    echo "WARNING: switch_root failed; staying in initramfs shell"
+  fi
+  mkdir -p /persist/root /persist/etc
+  export HOME=/persist/root
+fi
+
+cat <<'BANNER'
+Persistent files belong in /persist (it survives browser restarts).
+Try: echo hello > /persist/hello.txt && sync
+Then reload the browser tab, boot again, and: cat /persist/hello.txt
+BANNER
+
+# Interactive shell on the serial console with job control.
+cd "${HOME}" 2>/dev/null || cd /
+exec setsid cttyhack sh
+
+echo "init: shell exited; powering off"
+sync
+poweroff -f

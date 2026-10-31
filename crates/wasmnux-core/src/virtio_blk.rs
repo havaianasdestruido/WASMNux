@@ -400,7 +400,7 @@ mod tests {
         let mut dev = VirtioBlock::new(backend);
         dev.write(0x30, 4, 0).expect("queue sel");
         dev.write(0x38, 4, 8).expect("queue num");
-        dev.write(0x40, 4, (QUEUE_PAGE / 4096) as u64)
+        dev.write(0x40, 4, QUEUE_PAGE / 4096)
             .expect("queue pfn");
         (ram, dev)
     }
