@@ -8,8 +8,9 @@ with rustfmt; WASMNux also replaces deprecated constant spellings and adds the
 `FCVT.L.D` and `FCVT.D.LU` instructions and their tests in `src/cpu.rs`.
 WASMNux also changes `src/device/virtio_block_disk.rs` to report the actual
 image capacity, reject out-of-range transfers and bound descriptor-chain
-length; `src/mmu.rs` has a test-only memory constructor for device tests.
-The device is still an incomplete historical implementation. See the project's
+length. `src/memory.rs` corrects four-byte-aligned doubleword reads and
+byte-capacity validation; `src/mmu.rs` guards physical-address validation and
+has a test-only memory constructor. The device is still an incomplete historical implementation. See the project's
 test report for behavior and limitations. This emulator is a diagnostic, not a
 validated general-purpose RISC-V implementation.
 

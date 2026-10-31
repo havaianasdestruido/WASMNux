@@ -2,12 +2,16 @@
 pub struct Memory {
     /// Memory content
     data: Vec<u64>,
+    capacity: u64,
 }
 
 impl Memory {
     /// Creates a new `Memory`
     pub fn new() -> Self {
-        Memory { data: vec![] }
+        Memory {
+            data: vec![],
+            capacity: 0,
+        }
     }
 
     /// Initializes memory content.
@@ -16,6 +20,7 @@ impl Memory {
     /// # Arguments
     /// * `capacity`
     pub fn init(&mut self, capacity: u64) {
+        self.capacity = capacity;
         for _i in 0..((capacity + 7) / 8) {
             self.data.push(0);
         }
@@ -69,7 +74,7 @@ impl Memory {
             self.data[index]
         } else if (address % 4) == 0 {
             (self.read_word(address) as u64)
-                | ((self.read_word(address.wrapping_add(4)) as u64) << 4)
+                | ((self.read_word(address.wrapping_add(4)) as u64) << 32)
         } else {
             self.read_bytes(address, 8)
         }
@@ -163,6 +168,42 @@ impl Memory {
     /// # Arguments
     /// * `address`
     pub fn validate_address(&self, address: u64) -> bool {
-        return (address as usize) < self.data.len();
+        address < self.capacity
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Memory;
+
+    #[test]
+    fn doubleword_reads_and_writes_preserve_bytes_at_every_alignment() {
+        let mut memory = Memory::new();
+        memory.init(32);
+        let value = 0x1122_3344_5566_7788;
+        for address in 0..8 {
+            memory.write_doubleword(address, value);
+            assert_eq!(memory.read_doubleword(address), value, "offset {address}");
+            for (i, byte) in value.to_le_bytes().iter().enumerate() {
+                assert_eq!(
+                    memory.read_byte(address + i as u64),
+                    *byte,
+                    "offset {address}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn validates_exact_byte_capacity_without_integer_truncation() {
+        let mut memory = Memory::new();
+        assert!(!memory.validate_address(0));
+        memory.init(13);
+        for address in 0..13 {
+            assert!(memory.validate_address(address), "offset {}", address);
+        }
+        assert!(!memory.validate_address(13));
+        assert!(!memory.validate_address(15));
+        assert!(!memory.validate_address(u64::MAX));
     }
 }

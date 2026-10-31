@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { unalignedLoadCommand } from "./memory-fixture";
 
 test("historical BusyBox guest performs real filesystem, process and utility operations", async ({
   page,
@@ -44,6 +45,9 @@ test -r /proc/meminfo
 # The diagnostic image is 50 MiB. The block device must not advertise 100 MiB.
 awk '$4 == "vda" && $3 == 51200 { found=1 } END { exit !found }' /proc/partitions
 printf 'DISK_%s\n' CAPACITY_OK
+# Real RV64 ELF exits nonzero if a 4-byte-aligned LD returns the wrong high word.
+${unalignedLoadCommand()}
+printf 'MEMORY_%s\n' UNALIGNED_OK
 ps > /tmp/wasmnux-ps
 free > /tmp/wasmnux-free
 dmesg > /dev/null
@@ -91,5 +95,6 @@ sh /tmp/wasmnux-test.sh && printf 'CHECK_%s\n' PASS || printf 'CHECK_%s\n' FAIL
   expect(guestStatus, `Guest failed during utility verification: ${guestStatus}`).toBe("running");
   await expect(output).toContainText("CHECK_PASS");
   await expect(output).toContainText("DISK_CAPACITY_OK");
+  await expect(output).toContainText("MEMORY_UNALIGNED_OK");
   await expect(output).not.toContainText("CHECK_FAIL");
 });

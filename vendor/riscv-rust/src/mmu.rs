@@ -1029,6 +1029,23 @@ impl MemoryWrapper {
     }
 
     pub fn validate_address(&self, address: u64) -> bool {
-        self.memory.validate_address(address - DRAM_BASE)
+        address
+            .checked_sub(DRAM_BASE)
+            .map_or(false, |offset| self.memory.validate_address(offset))
+    }
+}
+
+#[cfg(test)]
+mod memory_wrapper_tests {
+    use super::{MemoryWrapper, DRAM_BASE};
+
+    #[test]
+    fn validates_physical_byte_addresses_at_both_boundaries() {
+        let memory = MemoryWrapper::test_memory(13);
+        assert!(!memory.validate_address(DRAM_BASE - 1));
+        assert!(memory.validate_address(DRAM_BASE));
+        assert!(memory.validate_address(DRAM_BASE + 12));
+        assert!(!memory.validate_address(DRAM_BASE + 13));
+        assert!(!memory.validate_address(u64::MAX));
     }
 }

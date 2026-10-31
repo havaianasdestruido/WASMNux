@@ -18,7 +18,7 @@ This is the source of truth. A checkbox is checked only after its acceptance cri
 - [x] Establish a strict TypeScript application; accept: build and strict type check pass; tests: TS-ALL.
 - [x] Configure `wasm32-unknown-unknown` compilation and checked bindings; accept: a browser instantiates the built module; tests: WASM-BROWSER.
 - [x] Establish linting, formatting, unit and integration testing; accept: independent reproducible commands; tests: TS-ALL and RUST-ALL.
-- [ ] Establish CI; accept: automated clean-checkout builds and all available tests; test: CI-01.
+- [x] Establish CI; accept: automated clean-checkout builds and all available tests; test: CI-01.
 - [x] Implement browser capability and persistence detection; accept: optional features and denial displayed truthfully; tests: CAP-01 and CAP-BROWSER.
 - [ ] Review and pin dependencies, transitive versions and licenses; accept: inventory and security review; test: DEP-AUDIT.
 
@@ -27,6 +27,7 @@ This is the source of truth. A checkbox is checked only after its acceptance cri
 - [x] Surface diagnostic emulator traps even if WASM cleanup throws; accept: real browser reports the trap and permits a fresh start; test: DIAG-TRAP.
 - [x] Rebuild and repair the historical diagnostic conversion instructions; accept: tested rounding/flags and all original real guest utility assertions pass; tests: DIAG-ISA and DIAG-UTILITIES.
 - [x] Correct the historical diagnostic block capacity and reject out-of-range transfers; accept: guest sees its real image size and invalid transfers return errors without partial disk writes; test: DIAG-DISK.
+- [x] Correct diagnostic unaligned doubleword reads and memory-address validation; accept: all alignments and bounds pass natively and a real guest ELF verifies the Wasm path; test: DIAG-MEMORY.
 - [ ] Integrate the selected VM engine with pinned provenance; accept: Rust/WASM executes actual RISC-V instructions; tests: VM-INST and VM-BROWSER.
 - [ ] Validate guest CPU, memory, privilege/MMU, interrupts, clocks and timers; accept: real kernel reaches userspace; tests: KERNEL-BOOT and ISA.
 - [ ] Validate firmware/direct boot and kernel boot protocol; accept: documented command line and inspected logs; test: KERNEL-BOOT.
