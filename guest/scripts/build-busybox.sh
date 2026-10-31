@@ -23,6 +23,15 @@ tar -xf "busybox-${VERSION}.tar.bz2"
 cd "busybox-${VERSION}"
 
 make ARCH=riscv64 CROSS_COMPILE="${CROSS}" defconfig
+# tc: BusyBox's tc applet still references the CBQ qdisc UAPI (TCA_CBQ_*)
+# that modern kernel headers removed (build error observed against the
+# 6.15 UAPI headers of our musl toolchain). tc is not a mission-required
+# applet; disable it rather than pin ancient headers everywhere.
+sed -i 's/^CONFIG_TC=y/# CONFIG_TC is not set/' .config
+if grep -q '^CONFIG_TC=y' .config; then
+  echo "ERROR: CONFIG_TC could not be disabled" >&2
+  exit 1
+fi
 # Static binary: no dynamic loader assumptions inside the initramfs.
 sed -i 's/^# CONFIG_STATIC is not set/CONFIG_STATIC=y/' .config
 if ! grep -q '^CONFIG_STATIC=y' .config; then
