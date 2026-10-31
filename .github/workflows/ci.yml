@@ -9,8 +9,33 @@ permissions:
   contents: read
 
 jobs:
+  fmt:
+    name: Rust formatting
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - name: Format check
+        id: fmtcheck
+        run: cargo fmt --all -- --check
+      - name: Produce rustfmt patch (uploaded for sandboxes without a Rust toolchain)
+        if: failure()
+        run: |
+          cargo fmt --all
+          git diff > rustfmt.patch
+          wc -l rustfmt.patch
+      - name: Upload rustfmt patch
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rustfmt-patch
+          path: rustfmt.patch
+
   rust:
-    name: Rust core (fmt, clippy, test, wasm build)
+    name: Rust core (clippy, test, wasm build)
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -20,8 +45,6 @@ jobs:
           targets: wasm32-unknown-unknown
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
-      - name: Format check
-        run: cargo fmt --all -- --check
       - name: Clippy (warnings are errors)
         run: cargo clippy --all-targets --all-features -- -D warnings
       - name: Unit + integration tests
@@ -31,13 +54,13 @@ jobs:
       - name: Generate wasm-bindgen JS package
         run: |
           cargo install wasm-bindgen-cli --version 0.2.100 --locked || cargo install wasm-bindgen-cli --locked
-          mkdir -p web/src/wasm
-          wasm-bindgen --target web --out-dir web/src/wasm \
+          mkdir -p wasm-pkg
+          wasm-bindgen --target web --out-dir wasm-pkg \
             target/wasm32-unknown-unknown/release/wasmnux_wasm.wasm
-          ls -l web/src/wasm
+          ls -l wasm-pkg
       - name: Upload WASM package artifact
         uses: actions/upload-artifact@v4
         with:
           name: wasmnux-wasm-pkg
-          path: web/src/wasm
+          path: wasm-pkg
           if-no-files-found: error
