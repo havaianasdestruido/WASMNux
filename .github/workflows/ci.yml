@@ -5,8 +5,14 @@ on:
     branches: ["**"]
   pull_request:
 
+# pull-requests:write is ONLY for the DIAGNOSTICS steps below: the primary
+# dev sandbox can reach api.github.com but not Actions log/artifact hosts,
+# so failure output is mirrored as PR comments to iterate with real
+# evidence. Remove the DIAGNOSTICS steps + this permission once development
+# happens somewhere with direct log access.
 permissions:
   contents: read
+  pull-requests: write
 
 jobs:
   fmt:
@@ -21,18 +27,32 @@ jobs:
       - name: Format check
         id: fmtcheck
         run: cargo fmt --all -- --check
-      - name: Produce rustfmt patch (uploaded for sandboxes without a Rust toolchain)
+      - name: DIAGNOSTICS — post the rustfmt patch to the PR
         if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
+          set -euo pipefail
           cargo fmt --all
           git diff > rustfmt.patch
-          wc -l rustfmt.patch
-      - name: Upload rustfmt patch
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: rustfmt-patch
-          path: rustfmt.patch
+          echo "patch bytes: $(wc -c < rustfmt.patch)"
+          PR=$(gh pr list --head "$GITHUB_REF_NAME" --state open --json number --jq '.[0].number // empty')
+          if [ -z "$PR" ]; then echo "no open PR for $GITHUB_REF_NAME; skipping diagnostics"; exit 0; fi
+          mkdir -p patch-parts
+          split -b 40000 -d rustfmt.patch patch-parts/part-
+          TOTAL=$(ls patch-parts | wc -l)
+          I=0
+          for part in patch-parts/*; do
+            I=$((I+1))
+            {
+              printf '<!-- wasmnux-diagnostics fmt-patch run-%s part-%s-of-%s sha-%s -->\n' "$GITHUB_RUN_ID" "$I" "$TOTAL" "$GITHUB_SHA"
+              printf '**CI diagnostics:** rustfmt patch part %s/%s (run %s). Apply the concatenated diff, then re-push.\n\n' "$I" "$TOTAL" "$GITHUB_RUN_ID"
+              printf '```diff\n'
+              cat "$part"
+              printf '\n```\n'
+            } > comment.md
+            gh pr comment "$PR" --body-file comment.md
+          done
 
   rust:
     name: Rust core (clippy, test, wasm build)
@@ -46,11 +66,17 @@ jobs:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
       - name: Clippy (warnings are errors)
-        run: cargo clippy --all-targets --all-features -- -D warnings
+        run: |
+          set -o pipefail
+          cargo clippy --all-targets --all-features -- -D warnings 2>&1 | tee clippy.log
       - name: Unit + integration tests
-        run: cargo test --workspace --all-features
+        run: |
+          set -o pipefail
+          cargo test --workspace --all-features 2>&1 | tee test.log
       - name: WebAssembly build
-        run: cargo build -p wasmnux-wasm --target wasm32-unknown-unknown --release
+        run: |
+          set -o pipefail
+          cargo build -p wasmnux-wasm --target wasm32-unknown-unknown --release 2>&1 | tee wasm.log
       - name: Generate wasm-bindgen JS package
         run: |
           cargo install wasm-bindgen-cli --version 0.2.100 --locked || cargo install wasm-bindgen-cli --locked
@@ -64,3 +90,23 @@ jobs:
           name: wasmnux-wasm-pkg
           path: wasm-pkg
           if-no-files-found: error
+      - name: DIAGNOSTICS — post failure logs to the PR
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          PR=$(gh pr list --head "$GITHUB_REF_NAME" --state open --json number --jq '.[0].number // empty')
+          if [ -z "$PR" ]; then echo "no open PR; skipping diagnostics"; exit 0; fi
+          {
+            printf '<!-- wasmnux-diagnostics rust-log run-%s sha-%s -->\n' "$GITHUB_RUN_ID" "$GITHUB_SHA"
+            printf '**CI diagnostics:** Rust job failed in run %s. Tail of captured logs:\n\n' "$GITHUB_RUN_ID"
+            for f in clippy.log test.log wasm.log; do
+              if [ -f "$f" ]; then
+                printf '### %s (last 200 lines)\n```\n' "$f"
+                tail -n 200 "$f" | head -c 18000
+                printf '\n```\n'
+              fi
+            done
+          } > comment.md
+          gh pr comment "$PR" --body-file comment.md
