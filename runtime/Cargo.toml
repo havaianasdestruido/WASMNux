@@ -1,0 +1,24 @@
+[package]
+name = "wasmnux-core"
+description = "Pure-std RISC-V RV64 emulator core compiled to WebAssembly for WASMNux"
+version = "0.1.0"
+edition = "2021"
+authors = ["WASMNux"]
+license = "Apache-2.0"
+
+[lib]
+name = "wasmnux_core"
+crate-type = ["cdylib", "rlib"]
+path = "src/lib.rs"
+
+[profile.release]
+opt-level = 2
+panic = "abort"
+
+[profile.dev]
+opt-level = 0
+panic = "unwind"
+
+[target.wasm32-unknown-unknown]
+# No external dependencies: crates.io is unreachable in the build sandbox.
+# The crate uses only `std`, which is prebuilt for wasm32-unknown-unknown.
