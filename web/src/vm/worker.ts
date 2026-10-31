@@ -291,7 +291,9 @@ function handleRequest(request: WorkerRequest): void {
 
 async function init(): Promise<void> {
   try {
-    const wasmModuleUrl: string = "/wasm/wasmnux_wasm.js";
+    // Built from the runtime origin so Vite's static import analysis never
+  // rewrites this into its own module pipeline (which refuses /public files).
+  const wasmModuleUrl: string = `${self.location.origin}/wasm/wasmnux_wasm.js`;
     const loaded: unknown = await import(/* @vite-ignore */ wasmModuleUrl);
     if (!isWasmModule(loaded)) {
       throw new Error("/wasm/wasmnux_wasm.js does not export the expected bindings");
