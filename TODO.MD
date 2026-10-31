@@ -14,10 +14,10 @@ This is the source of truth. A checkbox is checked only after its acceptance cri
 - [ ] Verify the selected engine boots current Linux and current Debian; accept: real browser boot logs and interactive commands; tests: KERNEL-BOOT and DEBIAN-BOOT.
 
 ## Phase 1 — Project Foundation
-- [ ] Establish a Rust workspace and reproducible stable toolchain; accept: clean build, tests, fmt and clippy; tests: RUST-ALL.
+- [x] Establish a Rust workspace and reproducible stable toolchain; accept: clean build, tests, fmt and clippy; tests: RUST-ALL.
 - [x] Establish a strict TypeScript application; accept: build and strict type check pass; tests: TS-ALL.
-- [ ] Configure `wasm32-unknown-unknown` compilation and checked bindings; accept: a browser instantiates the built module; tests: WASM-BROWSER.
-- [ ] Establish linting, formatting, unit and integration testing; accept: independent reproducible commands; tests: TS-ALL and RUST-ALL.
+- [x] Configure `wasm32-unknown-unknown` compilation and checked bindings; accept: a browser instantiates the built module; tests: WASM-BROWSER.
+- [x] Establish linting, formatting, unit and integration testing; accept: independent reproducible commands; tests: TS-ALL and RUST-ALL.
 - [ ] Establish CI; accept: automated clean-checkout builds and all available tests; test: CI-01.
 - [x] Implement browser capability and persistence detection; accept: optional features and denial displayed truthfully; tests: CAP-01 and CAP-BROWSER.
 - [ ] Review and pin dependencies, transitive versions and licenses; accept: inventory and security review; test: DEP-AUDIT.
@@ -25,6 +25,7 @@ This is the source of truth. A checkbox is checked only after its acceptance cri
 ## Phase 2 — Virtualization Core
 - [x] Boot the pinned historical diagnostic only; accept: real browser reaches Linux 5.4 userspace and executes a serial command; test: DIAG-BOOT.
 - [x] Surface diagnostic emulator traps even if WASM cleanup throws; accept: real browser reports the trap and permits a fresh start; test: DIAG-TRAP.
+- [x] Rebuild and repair the historical diagnostic conversion instructions; accept: tested rounding/flags and the unchanged real guest utility script passes; tests: DIAG-ISA and DIAG-UTILITIES.
 - [ ] Integrate the selected VM engine with pinned provenance; accept: Rust/WASM executes actual RISC-V instructions; tests: VM-INST and VM-BROWSER.
 - [ ] Validate guest CPU, memory, privilege/MMU, interrupts, clocks and timers; accept: real kernel reaches userspace; tests: KERNEL-BOOT and ISA.
 - [ ] Validate firmware/direct boot and kernel boot protocol; accept: documented command line and inspected logs; test: KERNEL-BOOT.
@@ -34,6 +35,7 @@ This is the source of truth. A checkbox is checked only after its acceptance cri
 - [ ] Validate the complete execution path; accept: actual guest commands execute, no mocked shell; test: VM-BROWSER.
 
 ## Phase 3 — WASM Runtime
+- [x] Add a checked, bounded diagnostic-only Wasm ABI; accept: invalid arguments fail and a browser runs the locally built module; tests: WASM-BOUNDARY and WASM-BROWSER.
 - [ ] Compile the own runtime to WASM with stable ABI; accept: repeatable build with pinned dependencies; tests: RUST-ALL and WASM-BUILD.
 - [ ] Implement checked TypeScript bindings and explicit error propagation; accept: invalid inputs and traps produce errors; test: WASM-BOUNDARY.
 - [ ] Implement initialization, shutdown, suspension and restoration; accept: state transitions and resources verified; test: VM-LIFECYCLE.

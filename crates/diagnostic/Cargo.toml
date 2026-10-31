@@ -1,0 +1,11 @@
+[package]
+name = "wasmnux-diagnostic"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+riscv_emu_rust = { path = "../../vendor/riscv-rust" }

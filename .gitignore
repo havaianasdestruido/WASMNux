@@ -5,3 +5,7 @@ playwright-report/
 test-results/
 public/guest/
 target/
+
+# Python cache files
+__pycache__/
+*.py[cod]

@@ -1,0 +1,11 @@
+[package]
+name = "riscv_emu_rust"
+version = "0.2.0"
+edition = "2015"
+authors = ["Takahiro"]
+license = "MIT"
+repository = "https://github.com/takahirox/riscv-rust"
+description = "Pinned diagnostic emulator; see PROVENANCE.md"
+
+[dependencies]
+fnv = { path = "../fnv" }

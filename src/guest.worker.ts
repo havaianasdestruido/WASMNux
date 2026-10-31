@@ -1,4 +1,5 @@
 /// <reference lib="webworker" />
+import { DiagnosticEmulator } from "./diagnostic-wasm";
 import { MAX_OUTPUT_BYTES, parseGuestRequest, type GuestEvent } from "./protocol";
 
 // This module is only instantiated by `new Worker`; it has no DOM access.
@@ -7,39 +8,10 @@ const MAX_PENDING_INPUT = 16384;
 const ASSET_BASE = new URL("/guest/", scope.location.origin);
 const controller = new AbortController();
 let state: "idle" | "loading" | "running" | "stopped" = "idle";
-let emulator: Emulator | undefined;
+let emulator: DiagnosticEmulator | undefined;
 let channel: MessageChannel | undefined;
 let pending: number[] = [];
 let waitingForOutput = false;
-
-interface Emulator {
-  setup_program(data: Uint8Array): void;
-  setup_filesystem(data: Uint8Array): void;
-  enable_page_cache(enabled: boolean): void;
-  run_cycles(cycles: number): void;
-  get_output(): number;
-  put_input(byte: number): void;
-  free(): void;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && (typeof value === "object" || typeof value === "function");
-}
-
-function isEmulator(value: unknown): value is Emulator {
-  return (
-    isRecord(value) &&
-    [
-      "setup_program",
-      "setup_filesystem",
-      "enable_page_cache",
-      "run_cycles",
-      "get_output",
-      "put_input",
-      "free",
-    ].every((name) => typeof value[name] === "function")
-  );
-}
 
 function emit(event: GuestEvent): void {
   scope.postMessage(event);
@@ -53,9 +25,8 @@ function cleanup(): void {
   const instance = emulator;
   emulator = undefined;
   try {
-    // A Wasm trap can leave wasm-bindgen's mutable borrow poisoned. In that
-    // case free() itself throws; never let cleanup mask the original error.
-    // The parent terminates this Worker after receiving the error, reclaiming it.
+    // A Wasm trap can leave the Rust session borrowed. Never let cleanup mask
+    // the original error; the parent terminates this Worker to reclaim it.
     instance?.free();
   } catch {
     // The failed instance cannot be reused and remains confined to this Worker.
@@ -66,11 +37,19 @@ function cleanup(): void {
 
 function fail(error: unknown): void {
   if (state === "stopped") return;
+  let pc = "";
+  if (error instanceof WebAssembly.RuntimeError && emulator) {
+    try {
+      pc = ` at guest PC 0x${emulator.lastPc().toString(16)}`;
+    } catch {
+      // Preserve the original trap even if diagnostic metadata is unavailable.
+    }
+  }
   state = "stopped";
   cleanup();
   const detail =
     error instanceof WebAssembly.RuntimeError
-      ? `Emulator trapped: ${error.message}. Diagnostic guest cannot continue.`
+      ? `Emulator trapped: ${error.message}${pc}. Diagnostic guest cannot continue.`
       : error instanceof Error
         ? error.message
         : "Unknown worker error";
@@ -105,18 +84,48 @@ async function loadAsset(name: string, size: number, expectedHash: string): Prom
   return bytes;
 }
 
+/** Locally built same-origin runtime; cap its size before compiling it. */
+async function loadRuntime(): Promise<Uint8Array<ArrayBuffer>> {
+  const response = await fetch(new URL("wasmnux_diagnostic.wasm", ASSET_BASE), {
+    signal: controller.signal,
+  });
+  if (!response.ok || !response.body) {
+    throw new Error(
+      `Cannot load diagnostic Wasm (HTTP ${response.status}); run npm run build:wasm`,
+    );
+  }
+  const bytes = new Uint8Array(4 * 1024 * 1024);
+  const reader = response.body.getReader();
+  let offset = 0;
+  try {
+    while (true) {
+      const result = await reader.read();
+      if (result.done) break;
+      if (offset + result.value.byteLength > bytes.byteLength) {
+        await reader.cancel();
+        throw new Error("Diagnostic Wasm exceeds its size limit");
+      }
+      bytes.set(result.value, offset);
+      offset += result.value.byteLength;
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  if (offset === 0) throw new Error("Diagnostic Wasm is empty");
+  return bytes.slice(0, offset);
+}
+
 function tick(): void {
   if (state !== "running" || !emulator || !channel) return;
   try {
     // Keep per-slice work bounded and give incoming worker messages a chance to run.
     const input = pending.splice(0, 128);
-    for (const byte of input) emulator.put_input(byte);
-    emulator.run_cycles(100000);
+    for (const byte of input) emulator.putInput(byte);
+    emulator.runCycles(100000);
     const output: number[] = [];
     while (output.length < MAX_OUTPUT_BYTES) {
-      const byte = emulator.get_output();
-      if (byte === 0) break;
-      if (!Number.isInteger(byte) || byte < 0 || byte > 255) throw new Error("Invalid serial byte");
+      const byte = emulator.getOutput();
+      if (byte === -1) break;
       output.push(byte);
     }
     if (output.length > 0) {
@@ -136,27 +145,10 @@ async function start(): Promise<void> {
   if (state !== "idle") throw new Error("Diagnostic worker already started");
   state = "loading";
   emit({ type: "starting" });
-  const wasm = await loadAsset(
-    "riscv_emu_rust_wasm_bg.wasm",
-    158147,
-    "e1804062b8a40bfe27af9a393bee291b0e8228435ebbc47a19d45a1faa8e3f65",
-  );
-  // The module is a same-origin, setup-verified upstream wasm-bindgen loader.
-  const loaderUrl = new URL("riscv_emu_rust_wasm.js", ASSET_BASE).href;
-  const loader: unknown = await import(/* @vite-ignore */ loaderUrl);
-  if (
-    !isRecord(loader) ||
-    typeof loader.default !== "function" ||
-    !isRecord(loader.WasmRiscv) ||
-    typeof loader.WasmRiscv.new !== "function"
-  ) {
-    throw new Error("Invalid emulator bindings");
-  }
-  await loader.default(wasm);
+  const wasm = await loadRuntime();
+  const result = await WebAssembly.instantiate(wasm);
   if (state !== "loading") return;
-  const instance: unknown = loader.WasmRiscv.new();
-  if (!isEmulator(instance)) throw new Error("Invalid emulator instance");
-  emulator = instance;
+  emulator = new DiagnosticEmulator(result.instance.exports);
   const firmware = await loadAsset(
     "fw_payload.elf",
     9907888,
@@ -168,11 +160,8 @@ async function start(): Promise<void> {
     "273067980c4d8ad3898d505c1786ef69ecf6b33b8373942089a8b0ffe84b3409",
   );
   if (state !== "loading") return;
-  emulator.setup_program(firmware);
-  emulator.setup_filesystem(disk);
-  // Upstream documents this cache as experimentally unsound when guest page
-  // tables change. Prefer correctness over diagnostic boot speed.
-  emulator.enable_page_cache(false);
+  emulator.setupProgram(firmware);
+  emulator.setupDisk(disk);
   state = "running";
   channel = new MessageChannel();
   channel.port1.onmessage = tick;

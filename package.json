@@ -10,7 +10,8 @@
     "lint": "biome lint .",
     "format:check": "biome format .",
     "test": "vitest run",
-    "test:browser": "playwright test"
+    "test:browser": "playwright test",
+    "build:wasm": "sh scripts/build_wasm.sh"
   },
   "dependencies": {
     "@xterm/addon-fit": "0.10.0",

@@ -1,9 +1,10 @@
 import { expect, test } from "@playwright/test";
+import { trapProgramCommand } from "./trap-fixture";
 
 test("clearly labels unavailable profiles, volatile data and missing artifacts", async ({
   page,
 }) => {
-  await page.route("**/riscv_emu_rust_wasm_bg.wasm", (route) => route.abort());
+  await page.route("**/wasmnux_diagnostic.wasm", (route) => route.abort());
   await page.goto("/");
   await expect(
     page.getByText("Temporary diagnostic, not a persistent Linux environment."),
@@ -26,6 +27,12 @@ test("boots the actual diagnostic guest, accepts terminal input and discards on 
   await page.getByRole("button", { name: "Boot diagnostic" }).click();
   await expect(page.locator("#vm-status")).toContainText("Running", { timeout: 30_000 });
   const rows = page.locator(".xterm-rows");
+  const mainThreadDelay = await page.evaluate(async () => {
+    const start = performance.now();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    return performance.now() - start;
+  });
+  expect(mainThreadDelay).toBeLessThan(1000);
   await expect(rows).toContainText("Please press Enter to activate this console", {
     timeout: 90_000,
   });
@@ -141,12 +148,19 @@ test("reports an actual guest trap and permits a fresh diagnostic", async ({ pag
   await page.locator(".xterm-helper-textarea").focus();
   await page.keyboard.press("Enter");
   await expect(rows).toContainText("/ #", { timeout: 20_000 });
-  await page.keyboard.type("awk 'BEGIN {print 42}'");
+  await page.keyboard.insertText(trapProgramCommand());
   await page.keyboard.press("Enter");
   await expect(page.locator("#vm-status")).toContainText("Error", { timeout: 30_000 });
   await expect(page.locator("#message")).toContainText("Emulator trapped: unreachable");
   await expect(page.getByRole("button", { name: "Boot diagnostic" })).toBeEnabled();
   await expect(page.getByRole("button", { name: "Stop", exact: true })).toBeDisabled();
+  await page.getByRole("button", { name: "Boot diagnostic" }).click();
+  await expect(page.locator("#vm-status")).toContainText("Running", { timeout: 30_000 });
+  await expect(rows).toContainText("Please press Enter to activate this console", {
+    timeout: 90_000,
+  });
+  await page.getByRole("button", { name: "Stop", exact: true }).click();
+  await expect(page.locator("#vm-status")).toContainText("Stopped");
   expect(errors).toEqual([]);
 });
 

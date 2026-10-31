@@ -1,0 +1,7 @@
+[workspace]
+resolver = "2"
+members = ["crates/diagnostic"]
+exclude = ["vendor/riscv-rust", "vendor/fnv"]
+
+[profile.release]
+panic = "abort"

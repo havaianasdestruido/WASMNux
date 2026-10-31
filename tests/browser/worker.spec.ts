@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { trapProgramCommand } from "./trap-fixture";
 
 test("reports an unavailable guest artifact instead of pretending to boot", async ({ page }) => {
   await page.route("**/fw_payload.elf", (route) => route.abort());
@@ -33,7 +34,7 @@ test("boots a historical real Linux guest in Rust/Wasm and executes a real comma
   await expect(page.locator("#status")).toHaveText("stopped");
 });
 
-test("reports a real emulator trap even when wasm-bindgen cleanup fails", async ({ page }) => {
+test("reports a real emulator trap even when cleanup fails", async ({ page }) => {
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   await page.goto("/tests/browser/worker-harness.html");
@@ -45,12 +46,12 @@ test("reports a real emulator trap even when wasm-bindgen cleanup fails", async 
   await page.getByLabel("Serial input", { exact: true }).fill("\\n");
   await page.getByRole("button", { name: "Send", exact: true }).click();
   await expect(output).toContainText("/ #", { timeout: 20_000 });
-  // This historical emulator lacks an instruction used by this guest's awk.
-  // Do not treat the trap as supported utility behavior; test only error delivery.
-  await page.getByLabel("Serial input", { exact: true }).fill("awk 'BEGIN {print 42}'\\n");
-  await page.getByRole("button", { name: "Send", exact: true }).click();
+  // A real executable with a deliberately invalid instruction exercises the
+  // unimplemented decoder path without relying on a formerly broken applet.
+  await page.getByLabel("Raw serial input").fill(`${trapProgramCommand()}\n`);
+  await page.getByRole("button", { name: "Send raw" }).click();
   await expect(page.locator("#status")).toHaveText(
-    "error: Emulator trapped: unreachable. Diagnostic guest cannot continue.",
+    "error: Emulator trapped: unreachable at guest PC 0x10078. Diagnostic guest cannot continue.",
     { timeout: 30_000 },
   );
   await page.getByRole("button", { name: "Stop" }).click();

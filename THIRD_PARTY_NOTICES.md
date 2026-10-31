@@ -2,7 +2,7 @@
 
 This repository's own work is under the existing [Apache-2.0 LICENSE](LICENSE). This inventory is incomplete for redistribution of the historical binary guest; it is not a legal clearance or a reproducible-build attestation.
 
-## Historical diagnostic (not committed)
+## Historical guest binaries (not committed)
 
 `scripts/fetch_probe.py` retrieves a GitHub source archive at commit [`8ee69d7a5dc7ef6d8b2bda96bf86d2923f2cf176`](https://github.com/takahirox/riscv-rust/tree/8ee69d7a5dc7ef6d8b2bda96bf86d2923f2cf176) of `takahirox/riscv-rust`. It extracts only the four explicitly named regular files after size and SHA-256 validation:
 
@@ -13,9 +13,13 @@ This repository's own work is under the existing [Apache-2.0 LICENSE](LICENSE). 
 | `fw_payload.elf` | 9,907,888 | `3ce5529fe302144732b22636d614965bea3ac09999cfdb42912e74c33c6396e6` |
 | `rootfs.img` | 52,428,800 | `273067980c4d8ad3898d505c1786ef69ecf6b33b8373942089a8b0ffe84b3409` |
 
-At runtime the worker rechecks the Wasm, firmware and rootfs sizes/hashes; the JavaScript loader is checked by the setup fetcher but is not independently rehashed on each import. The hashes pin the retrieved bytes; they do **not** establish signed upstream provenance, a safe artifact, or correspondence to a reproducible source build. The upstream emulator is MIT-licensed, and its Rust dependency manifest names `fnv` and `wasm-bindgen`; the precise dependencies and licenses in the prebuilt Wasm have not been independently reconstructed.
+The worker uses the locally built `wasmnux_diagnostic.wasm` rather than the fetched prebuilt Wasm/JavaScript, and rechecks firmware and rootfs sizes/hashes before loading them. The local runtime is served from the same origin with a size limit; it is not rehashed against a release manifest. The hashes pin retrieved bytes; they do **not** establish signed upstream provenance, a safe artifact, or correspondence to a reproducible guest build. The fetched prebuilt Wasm/loader are retained for comparison but not executed; their exact dependency and license inventory has not been independently reconstructed.
 
 The upstream [guest build instructions](https://github.com/takahirox/riscv-rust/blob/8ee69d7a5dc7ef6d8b2bda96bf86d2923f2cf176/resources/linux/opensbi/Readme.md) describe Linux 5.4, OpenSBI 0.8 and static BusyBox 1.32.0. Linux and BusyBox carry GPL-family obligations; OpenSBI is BSD-2-Clause with additional notices; a statically linked C library may carry further obligations. Exact binary-to-source correspondence, all build inputs/configurations, notices and corresponding-source/relinking obligations have **not** been established. Do not publish these binary images as a release until this review is completed. `npm run build` copies `public/guest` if the files are present.
+
+## Vendored Rust source
+
+`vendor/riscv-rust/src` is based on the pinned MIT-licensed upstream commit above. It is reformatted with rustfmt and includes mechanical deprecated-constant updates plus our `FCVT.L.D` and `FCVT.D.LU` decoder entries and tests. See `vendor/riscv-rust/PROVENANCE.md` and its `LICENSE`. `vendor/fnv` is `fnv` 1.0.7 at commit `4b4784ebfd3332dc61f0640764d6f1140e03a9ab`, reformatted with rustfmt; its MIT and Apache-2.0 license texts are included there. The local diagnostic ABI depends on these path-pinned sources and does not use `wasm-bindgen`.
 
 ### `riscv-rust` MIT notice
 
