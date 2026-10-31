@@ -1,0 +1,31 @@
+{
+  "name": "wasmnux-web",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Browser host for the WASMNux RISC-V virtual machine: profiles, persistent disks, terminal, WebGPU framebuffer",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0 --port 5173",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview --host 0.0.0.0 --port 4173",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src tests --max-warnings 0",
+    "format:check": "prettier --check \"src/**/*.ts\" \"tests/**/*.ts\" \"*.html\"",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@xterm/addon-fit": "^0.10.0",
+    "@xterm/xterm": "^5.5.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.0.0",
+    "@webgpu/types": "^0.1.0",
+    "eslint": "^9.0.0",
+    "prettier": "^3.0.0",
+    "typescript": "^5.6.0",
+    "typescript-eslint": "^8.0.0",
+    "vite": "^5.4.0",
+    "vitest": "^2.1.0"
+  }
+}
