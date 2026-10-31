@@ -1,0 +1,118 @@
+name: Guest images
+
+# Heavyweight guest builds (kernel/Debian take tens of minutes) are manual.
+# The fast BusyBox+initramfs pipeline can also be triggered by touching
+# guest/.build-trigger, which works before this workflow lands on main
+# (workflow_dispatch requires the file on the default branch).
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "What to build"
+        type: choice
+        options: [vanilla, Debian, all]
+        default: vanilla
+  push:
+    paths: ["guest/.build-trigger"]
+
+permissions:
+  contents: read
+
+jobs:
+  busybox-initramfs:
+    name: BusyBox (riscv64) + Vanilla initramfs
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install cross toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-riscv64-linux-gnu qemu-user-static file cpio gzip bc
+      - name: Resolve upstream versions (no hardcoding)
+        run: ./guest/scripts/versions.sh all
+      - name: Build BusyBox and enforce applet list
+        run: ./guest/scripts/build-busybox.sh "$GITHUB_WORKSPACE/guest/build/vanilla-rootfs"
+      - name: Behaviour-test the riscv64 BusyBox under qemu-user
+        run: |
+          QEMU=$(command -v qemu-riscv64-static)
+          run_bb() { "$QEMU" "$GITHUB_WORKSPACE/guest/build/vanilla-rootfs/bin/busybox" "$@"; }
+          # The behaviour harness takes a binary path; wrap it for qemu.
+          mkdir -p /tmp/bbwrap
+          printf '#!/bin/sh\nexec %s %s "$@"\n' "$QEMU" "$GITHUB_WORKSPACE/guest/build/vanilla-rootfs/bin/busybox" > /tmp/bbwrap/busybox
+          chmod +x /tmp/bbwrap/busybox
+          /tmp/bbwrap/busybox uname -m || run_bb uname -m
+          sh guest/tests/busybox-applets.sh /tmp/bbwrap/busybox
+      - name: Build initramfs
+        run: ./guest/scripts/build-initramfs.sh "$GITHUB_WORKSPACE/guest/build/vanilla-rootfs" "$GITHUB_WORKSPACE/guest/build/initramfs.cpio.gz"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vanilla-initramfs
+          path: guest/build/initramfs.cpio.gz
+          if-no-files-found: error
+
+  opensbi:
+    name: OpenSBI fw_jump
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-riscv64-linux-gnu
+      - run: ./guest/scripts/build-opensbi.sh "$GITHUB_WORKSPACE/guest/build/opensbi"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: opensbi
+          path: guest/build/opensbi
+
+  kernel:
+    name: Linux kernel (latest stable, riscv64)
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-riscv64-linux-gnu bc flex bison libssl-dev libelf-dev dwarves xz-utils
+      - run: ./guest/scripts/build-kernel.sh "$GITHUB_WORKSPACE/guest/build/kernel"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kernel
+          path: guest/build/kernel
+
+  package:
+    name: Package guest profiles
+    if: github.event_name == 'workflow_dispatch'
+    needs: [busybox-initramfs, opensbi, kernel]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Package Vanilla profile
+        run: |
+          ./guest/scripts/package-profile.sh vanilla \
+            artifacts/kernel artifacts/opensbi \
+            artifacts/vanilla-initramfs/initramfs.cpio.gz \
+            "$GITHUB_WORKSPACE/dist-guest/vanilla"
+      - name: Build + package Debian root image
+        if: inputs.target == 'Debian' || inputs.target == 'all'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y debootstrap debian-archive-keyring qemu-user-static e2fsprogs
+          sudo ./guest/scripts/build-Debian.sh "$GITHUB_WORKSPACE/guest/build/Debian" 2048
+          ./guest/scripts/package-profile.sh Debian \
+            artifacts/kernel artifacts/opensbi \
+            guest/build/Debian/debian-*.img \
+            "$GITHUB_WORKSPACE/dist-guest/Debian"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: guest-profiles
+          path: dist-guest
+          if-no-files-found: error

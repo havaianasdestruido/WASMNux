@@ -110,3 +110,79 @@ jobs:
             done
           } > comment.md
           gh pr comment "$PR" --body-file comment.md
+
+  web:
+    name: Web app (typecheck, lint, unit tests, build)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci --prefix web
+      - name: Typecheck (strict)
+        run: npm --prefix web run typecheck 2>&1 | tee web-typecheck.log
+      - name: Lint
+        run: npm --prefix web run lint 2>&1 | tee web-lint.log
+      - name: Unit tests
+        run: npm --prefix web test 2>&1 | tee web-test.log
+      - name: Production build
+        run: npm --prefix web run build 2>&1 | tee web-build.log
+      - name: DIAGNOSTICS — post failure logs to the PR
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          PR=$(gh pr list --head "$GITHUB_REF_NAME" --state open --json number --jq '.[0].number // empty')
+          if [ -z "$PR" ]; then exit 0; fi
+          {
+            printf '<!-- wasmnux-diagnostics web-log run-%s sha-%s -->\n' "$GITHUB_RUN_ID" "$GITHUB_SHA"
+            printf '**CI diagnostics:** web job failed in run %s.\n\n' "$GITHUB_RUN_ID"
+            for f in web-typecheck.log web-lint.log web-test.log web-build.log; do
+              if [ -f "$f" ]; then printf '### %s\n```\n' "$f"; tail -n 120 "$f" | head -c 12000; printf '\n```\n'; fi
+            done
+          } > comment.md
+          gh pr comment "$PR" --body-file comment.md
+
+  e2e:
+    name: Browser e2e (Playwright + real WASM core)
+    needs: [rust, web]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci --prefix web
+      - name: Place the CI-built WASM core where the worker loads it
+        uses: actions/download-artifact@v4
+        with:
+          name: wasmnux-wasm-pkg
+          path: web/public/wasm
+      - name: Install Chromium
+        run: npx --prefix web playwright install --with-deps chromium
+      - name: Run Playwright suite
+        run: |
+          set -o pipefail
+          npm --prefix web exec -- playwright test 2>&1 | tee e2e.log
+      - name: DIAGNOSTICS — post failure log to the PR
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          PR=$(gh pr list --head "$GITHUB_REF_NAME" --state open --json number --jq '.[0].number // empty')
+          if [ -z "$PR" ]; then exit 0; fi
+          {
+            printf '<!-- wasmnux-diagnostics e2e-log run-%s sha-%s -->\n' "$GITHUB_RUN_ID" "$GITHUB_SHA"
+            printf '**CI diagnostics:** e2e job failed in run %s.\n\n```\n' "$GITHUB_RUN_ID"
+            tail -n 250 e2e.log | head -c 40000
+            printf '\n```\n'
+          } > comment.md
+          gh pr comment "$PR" --body-file comment.md

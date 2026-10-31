@@ -400,8 +400,7 @@ mod tests {
         let mut dev = VirtioBlock::new(backend);
         dev.write(0x30, 4, 0).expect("queue sel");
         dev.write(0x38, 4, 8).expect("queue num");
-        dev.write(0x40, 4, QUEUE_PAGE / 4096)
-            .expect("queue pfn");
+        dev.write(0x40, 4, QUEUE_PAGE / 4096).expect("queue pfn");
         (ram, dev)
     }
 
@@ -425,8 +424,13 @@ mod tests {
         put_desc(ram, 0, OUT_HDR, 16, 1, 1);
         put_desc(ram, 1, DATA, data_len, data_flags, 2);
         put_desc(ram, 2, STATUS, 1, 2, 0);
-        ram.write_int(avail + 4, 2, 0).expect("avail ring head");
-        ram.write_int(avail + 2, 2, 1).expect("avail index");
+        // Like a real guest driver: avail.idx advances monotonically, and
+        // the head descriptor goes into ring slot (old idx % queue_num).
+        let next_slot = ram.read_int(avail + 2, 2).expect("avail idx");
+        ram.write_int(avail + 4 + (next_slot % 8) * 2, 2, 0)
+            .expect("avail ring head");
+        ram.write_int(avail + 2, 2, next_slot + 1)
+            .expect("avail index");
         ram.write_int(STATUS, 1, 0xFF).expect("poison status");
     }
 

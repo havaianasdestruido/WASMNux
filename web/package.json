@@ -20,6 +20,8 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.0.0",
+    "@playwright/test": "^1.64.1",
+    "@types/node": "^26.6.6",
     "@webgpu/types": "^0.1.0",
     "eslint": "^9.0.0",
     "prettier": "^3.0.0",
