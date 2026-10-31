@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#101412" />
+    <title>WASMNux — Linux runtime laboratory</title>
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <a class="brand" href="/" aria-label="WASMNux home">
+          <span class="brand-mark" aria-hidden="true">W<span>_</span></span>
+          <span>WASMNux <small>LINUX RUNTIME LAB</small></span>
+        </a>
+        <div class="topbar-right"><span class="prototype">EARLY DEVELOPMENT</span><a href="https://github.com/havaianasdestruido/WASMNux" target="_blank" rel="noreferrer">Repository <span aria-hidden="true">↗</span></a></div>
+      </header>
+
+      <main class="workspace">
+        <aside class="sidebar" aria-label="Environment and capabilities">
+          <div class="section-heading"><span>ENVIRONMENTS</span><span class="section-count">01 / 03</span></div>
+          <div class="environment selected" aria-current="true">
+            <span class="env-icon diagnostic-icon" aria-hidden="true">&gt;_</span>
+            <span class="env-copy"><strong>Diagnostic guest</strong><small>Linux 5.4 · RISC-V</small></span>
+            <span class="env-tag">TEST</span>
+          </div>
+          <div class="environment unavailable" aria-disabled="true">
+            <span class="env-icon" aria-hidden="true">V</span>
+            <span class="env-copy"><strong>Vanilla Linux</strong><small>Current upstream kernel</small></span>
+            <span class="env-tag">PENDING</span>
+          </div>
+          <div class="environment unavailable" aria-disabled="true">
+            <span class="env-icon" aria-hidden="true">D</span>
+            <span class="env-copy"><strong>Debian</strong><small>Stable · riscv64</small></span>
+            <span class="env-tag">PENDING</span>
+          </div>
+
+          <div class="sidebar-divider"></div>
+          <div class="section-heading"><span>HOST CAPABILITIES</span><span class="subtle">DETECTED</span></div>
+          <dl class="capabilities">
+            <div><dt>WebAssembly</dt><dd id="cap-wasm">Checking</dd></div>
+            <div><dt>Web Workers</dt><dd id="cap-worker">Checking</dd></div>
+            <div><dt>WebGPU API</dt><dd id="cap-gpu">Checking</dd></div>
+            <div><dt>OPFS API</dt><dd id="cap-opfs">Checking</dd></div>
+            <div><dt>Shared memory</dt><dd id="cap-shared">Checking</dd></div>
+          </dl>
+          <p class="sidebar-note">API availability is not a graphics or storage integration test.</p>
+          <div class="sidebar-divider"></div>
+          <div class="section-heading"><span>ORIGIN STORAGE</span></div>
+          <p class="storage-line" id="storage-status">Checking browser storage…</p>
+          <button class="text-button" id="request-persistence" type="button">Request persistent storage <span aria-hidden="true">↗</span></button>
+          <p class="sidebar-note">This does not persist the diagnostic guest disk.</p>
+          <button class="text-button inspect-button" id="inspect-storage" type="button">Inspect prototype block store <span aria-hidden="true">↗</span></button>
+          <p class="sidebar-note" id="block-status" role="status">Not connected to a guest.</p>
+          <div class="sidebar-divider"></div>
+          <div class="section-heading"><span>DISPLAY PIPELINE</span></div>
+          <button class="text-button" id="test-display" type="button">Run display check <span aria-hidden="true">↗</span></button>
+          <div id="display-test" class="display-test" hidden>
+            <div id="framebuffer-host"></div>
+            <p id="display-result" role="status"></p>
+            <p>Synthetic test pattern; not guest output.</p>
+          </div>
+          <div class="sidebar-footer"><span class="status-dot"></span> Local browser execution <span>↗</span></div>
+        </aside>
+
+        <section class="content">
+          <div class="breadcrumb">WORKSPACE <span>/</span> DIAGNOSTIC GUEST <span>/</span> CONSOLE</div>
+          <div class="page-heading">
+            <div><p class="eyebrow">RISC-V / WASM</p><h1>Diagnostic guest</h1><p class="lead">A real Linux boot path for development and verification.</p></div>
+            <div class="runtime-badge"><span class="status-dot"></span> LOCAL RUNTIME</div>
+          </div>
+          <div class="warning" role="note">
+            <span class="warning-icon" aria-hidden="true">!</span>
+            <div><strong>Temporary diagnostic, not a persistent Linux environment.</strong><br />This historical Linux 5.4 / BusyBox image is offline and all guest changes are lost on stop or refresh. Some BusyBox commands can stop the emulator because instruction support is incomplete. The requested Vanilla and Debian profiles are not implemented.</div>
+          </div>
+          <div class="machine-meta" aria-label="Diagnostic machine information">
+            <div><span>GUEST ARCHITECTURE</span><strong>riscv64</strong></div>
+            <div><span>GUEST MEMORY</span><strong>128 MiB <small>fixed</small></strong></div>
+            <div><span>DISK BACKING</span><strong>Volatile <small>50 MiB</small></strong></div>
+            <div><span>NETWORK</span><strong>Unavailable</strong></div>
+          </div>
+          <section class="console-card" aria-label="Guest serial console">
+            <div class="console-toolbar">
+              <div class="console-title"><span class="terminal-icon" aria-hidden="true">&gt;_</span><div><strong>Serial console</strong><small>ACTUAL GUEST OUTPUT</small></div></div>
+              <div class="console-actions"><button id="copy" class="icon-button" type="button" title="Copy terminal selection">Copy</button><button id="paste" class="icon-button" type="button" title="Paste from clipboard">Paste</button><span class="action-divider"></span><span class="connection" id="vm-status" data-state="idle" role="status">● &nbsp;Stopped</span></div>
+            </div>
+            <div id="terminal" class="terminal" aria-label="Interactive Linux serial terminal"></div>
+            <div class="console-bottom"><span><span class="keyboard-icon" aria-hidden="true">⌨</span> Click the console to type · press Enter when prompted</span><span>TTY S0</span></div>
+          </section>
+          <div class="controls-row">
+            <div class="controls"><button class="primary-button" id="start" type="button"><span aria-hidden="true">▶</span> Boot diagnostic</button><button class="secondary-button" id="stop" type="button" disabled><span aria-hidden="true">■</span> Stop</button></div>
+            <p id="message" class="message" role="status" aria-live="polite">Ready to start a fresh, temporary guest.</p>
+          </div>
+          <div class="setup-note"><span aria-hidden="true">ⓘ</span><p>First run requires the pinned diagnostic assets. Run <code>python3 scripts/fetch_probe.py</code> before starting the app. See <code>TODO.MD</code> for verified progress.</p></div>
+        </section>
+      </main>
+      <footer class="footer"><span>WASMNux <span class="footer-sep">/</span> WORK IN PROGRESS</span><span>NO GUEST DATA IS PERSISTED</span></footer>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

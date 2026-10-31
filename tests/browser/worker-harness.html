@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en">
+  <head><meta charset="utf-8" /><title>Diagnostic worker test</title></head>
+  <body>
+    <button id="start" type="button">Start</button>
+    <button id="stop" type="button">Stop</button>
+    <input id="input" aria-label="Serial input" />
+    <button id="send" type="button">Send</button>
+    <textarea id="script" aria-label="Raw serial input"></textarea>
+    <button id="send-script" type="button">Send raw</button>
+    <label><input id="auto-ack" type="checkbox" checked /> Acknowledge output</label>
+    <button id="ack" type="button">Release output</button>
+    <div id="status"></div>
+    <pre id="output"></pre>
+    <script type="module" src="/tests/browser/worker-harness.ts"></script>
+  </body>
+</html>

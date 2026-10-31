@@ -1,0 +1,60 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run format:check
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: python3 -m unittest discover -s tests -p 'test_*.py' -v
+      - run: npm run build
+      - run: npm audit --audit-level=low
+
+  chromium:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: python3 scripts/fetch_probe.py
+      # Includes the known, unskipped diagnostic BusyBox failure.
+      - run: npm run test:browser
+
+  rust-std-provenance:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Compare development mirror with the official Rust 1.99.0 Wasm std
+        shell: bash
+        run: |
+          set -euo pipefail
+          url=https://static.rust-lang.org/dist/rust-std-1.99.0-wasm32-unknown-unknown.tar.xz
+          curl --fail --silent --show-error --location "$url" --output /tmp/rust-std.tar.xz
+          echo 'b760b0c9b08a6843c05de0098bd6802e23178ff473c4715ae57c1d679125bf22  /tmp/rust-std.tar.xz' | sha256sum --check
+          mkdir /tmp/rust-std-official
+          tar -xf /tmp/rust-std.tar.xz -C /tmp/rust-std-official
+          cd /tmp/rust-std-official/rust-std-1.99.0-wasm32-unknown-unknown/rust-std-wasm32-unknown-unknown/lib/rustlib/wasm32-unknown-unknown
+          actual=$(find . -type f -print0 | sort -z | xargs -0 sha256sum | sha256sum | cut -d' ' -f1)
+          expected=be7a9eba42af157dfd4076057dee6bcbec908cdd0e08a7591ac09f9953595586
+          test "$actual" = "$expected"
+          echo 'Official Wasm std contents match the temporary development mirror.'
