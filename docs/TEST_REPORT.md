@@ -86,6 +86,17 @@ This report tracks verification evidence for every completed phase and requireme
 | `P6-03` | Real Chromium 153 Web Worker Debian `13.7` `apt-get install` + OPFS reload offline persistence | Playwright `1.64.1` + Chromium `153.0.0` | `npx playwright test tests/e2e/debian-linux.spec.ts` | Boots Debian `13.7` in Worker, runs `apt-get update && apt-get install -y wasmnux-hello` over Vite `/debian-repo/`, powers off, reloads tab with `networkEnabled: false`, verifies `dpkg -s wasmnux-hello` & executes binary | `1 passed (52.2s)` (`storageMode: "opfs+idb"`, `dpkgInstalled: true`, `helloPersisted: true`) | PASS |
 | `P9-01` | Browser HTTP Fetch bridge SSRF guardrails, path traversal blocking, & SPA fallback handling | Vitest `3.2.7` | `npx vitest run tests/unit/network-bridge.test.ts` | Blocks `localhost`, `127.*`, `169.254.*`, `192.168.*`, `172.16-31.*`, `[::1]`; maps `apt.wasmnux.local` -> same-origin `/debian-repo/*`; turns SPA `text/html` fallback into HTTP `404` | `3 passed (6ms)` | PASS |
 
+---
+
+## Phase 7 — WebGPU Compute + Render Pipeline & Canvas 2D Fallback Evidence
+
+| Test ID | Requirement Covered | Environment | Exact Command / Procedure | Expected Result | Actual Result | Status |
+|---|---|---|---|---|---|---|
+| `P7-01` | `BGRX8888 -> RGBA8888` pixel math, aspect-ratio letterbox/pillarbox geometry, & WGSL shader structure | Vitest `3.2.7` | `npx vitest run tests/unit/gpu-renderer.test.ts` | Exact byte conversion, bounds errors on short buffers, exact aspect-fit rectangles | `4 passed (4ms)` | PASS |
+| `P7-02` | Live Linux `7.3.1` `/dev/fb0` `wasmnux-fbtest` -> WebGPU compute (`rgba8unorm`) + render + `device.lost` recovery + resize | Playwright `1.64.1` + Chromium `153.0.0` (`google / swiftshader`) | `npx playwright test tests/e2e/webgpu-graphics.spec.ts` | `readRgbaPixels()` matches `[56, 189, 248, 255]` & `[239, 68, 68, 255]`; `simulateDeviceLoss()` recovers (`deviceLostRecoveries >= 1`) and preserves shadow frame while Linux continues executing | `PASS (4.4s)` | PASS |
+| `P7-03` | Automatic `Canvas2DFramebufferRenderer` fallback when `navigator.gpu` is unavailable | Playwright `1.64.1` + Chromium `153.0.0` (`navigator.gpu = undefined`) | `npx playwright test tests/e2e/webgpu-graphics.spec.ts` | `activeBackend === "canvas2d"`, identical `[56, 189, 248, 255]` & `[239, 68, 68, 255]` pixel output | `PASS (4.4s)` | PASS |
+
+
 
 
 

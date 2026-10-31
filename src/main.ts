@@ -1,3 +1,4 @@
+import { FramebufferDisplayController } from './gpu/display-controller';
 import { BootOrchestrator } from './runtime/boot-orchestrator';
 import { detectBrowserCapabilities } from './runtime/capabilities';
 import { VmClient } from './runtime/vm-client';
@@ -13,6 +14,7 @@ declare global {
       readonly crc32: typeof crc32;
     };
     __WASMNUX_BOOT_ORCHESTRATOR_CTOR__?: typeof BootOrchestrator;
+    __WASMNUX_DISPLAY_CONTROLLER_CTOR__?: typeof FramebufferDisplayController;
   }
 }
 
@@ -22,6 +24,7 @@ if (typeof window !== 'undefined') {
     crc32,
   };
   window.__WASMNUX_BOOT_ORCHESTRATOR_CTOR__ = BootOrchestrator;
+  window.__WASMNUX_DISPLAY_CONTROLLER_CTOR__ = FramebufferDisplayController;
 }
 
 async function runWorkerSmokeCheck(wasmUrl: string): Promise<{

@@ -219,31 +219,31 @@ Central implementation plan, acceptance criteria, and verification tracker for *
   - *Verification:* Playwright E2E Debian persistence test.
 
 ## Phase 7 — WebGPU and Graphics
-- [ ] Implement WebGPU initialization (`src/gpu/webgpu-renderer.ts` adapter negotiation, device creation, capability limits inspection, `<canvas>` `webgpu` context configuration).
+- [x] Implement WebGPU initialization (`src/gpu/webgpu-renderer.ts` adapter negotiation, device creation, capability limits inspection, `<canvas>` `webgpu` context configuration).
   - *Acceptance:* Acquires real `GPUAdapter` and `GPUDevice` when supported and reports adapter info cleanly.
   - *Verification:* Unit tests + Chromium WebGPU Playwright test.
-- [ ] Implement the graphics presentation pipeline (WGSL compute shader converting guest `XRGB8888`/`BGRX8888` scanlines into `rgba8unorm` texture + WGSL vertex/fragment presentation pipeline with aspect-preserving scaling and optional CRT/sharpness modes).
+- [x] Implement the graphics presentation pipeline (WGSL compute shader converting guest `XRGB8888`/`BGRX8888` scanlines into `rgba8unorm` texture + WGSL vertex/fragment presentation pipeline with aspect-preserving scaling and optional CRT/sharpness modes).
   - *Acceptance:* Shaders compile with zero WGSL validation errors and present guest pixels accurately.
   - *Verification:* Shader compilation and pixel readback verification test.
-- [ ] Integrate the selected virtual graphics device (`simple-framebuffer` at `0x5000_0000` driven by Linux `simplefb` + `fbcon` `/dev/fb0` + guest framebuffer drawing tool `fbtest`).
+- [x] Integrate the selected virtual graphics device (`simple-framebuffer` at `0x5000_0000` driven by Linux `simplefb` + `fbcon` `/dev/fb0` + guest framebuffer drawing tool `wasmnux-fbtest`).
   - *Acceptance:* Linux kernel initializes `simple-framebuffer` `640x400` `/dev/fb0` (`fbcon`) during boot and renders real pixels into VRAM.
   - *Verification:* Boot log `simple-framebuffer` check + non-zero VRAM pixel verification.
-- [ ] Implement framebuffer updates (dirty-scanline bitmap in Rust WASM transferring only modified scanline ranges to the renderer per animation frame).
+- [x] Implement framebuffer updates (dirty-scanline bitmap in Rust WASM transferring only modified scanline ranges to the renderer per animation frame).
   - *Acceptance:* Unchanged frames incur zero GPU texture upload traffic; modified scanlines update immediately.
   - *Verification:* Dirty-region tracking unit and integration tests.
-- [ ] Implement resizing (responsive `<canvas>` viewport resize + guest framebuffer resolution reconfiguration handling without resource leaks).
+- [x] Implement resizing (responsive `<canvas>` viewport resize + guest framebuffer resolution reconfiguration handling without resource leaks).
   - *Acceptance:* Resizing container reconfigures swapchain/viewport cleanly without distortion or crashes.
   - *Verification:* Dynamic resize tests on both WebGPU and Canvas2D renderers.
-- [ ] Implement resource cleanup (`destroy()` releasing GPU buffers, textures, bind groups, pipelines, and unconfiguring canvas context on VM stop/switch).
+- [x] Implement resource cleanup (`destroy()` releasing GPU buffers, textures, bind groups, pipelines, and unconfiguring canvas context on VM stop/switch).
   - *Acceptance:* Zero leaked GPU objects across renderer switches or VM restarts.
   - *Verification:* Renderer lifecycle cleanup tests.
-- [ ] Implement device-loss recovery (`device.lost` handler automatically re-initializing WebGPU device or seamlessly failing over to `Canvas2DRenderer` without interrupting the running Linux VM).
+- [x] Implement device-loss recovery (`device.lost` handler automatically re-initializing WebGPU device or seamlessly failing over to `Canvas2DRenderer` without interrupting the running Linux VM).
   - *Acceptance:* Simulated `device.destroy()` / device-loss event recovers rendering automatically while guest Linux continues running.
   - *Verification:* Device-loss fault-injection test.
-- [ ] Implement a fallback renderer (`src/gpu/canvas2d-renderer.ts` converting guest `BGRX8888` dirty scanlines into `ImageData` and presenting via Canvas 2D `putImageData`).
+- [x] Implement a fallback renderer (`src/gpu/canvas2d-renderer.ts` converting guest `BGRX8888` dirty scanlines into `ImageData` and presenting via Canvas 2D `putImageData`).
   - *Acceptance:* Identical visual output when WebGPU is unavailable or disabled by user toggle.
   - *Verification:* Canvas 2D pixel accuracy and Playwright WebGPU-disabled E2E test.
-- [ ] Validate rendering on real browsers (Playwright tests verifying live framebuffer pixels after Linux boot and `/dev/fb0` writes under WebGPU-enabled and WebGPU-disabled browser setups).
+- [x] Validate rendering on real browsers (Playwright tests verifying live framebuffer pixels after Linux boot and `/dev/fb0` writes under WebGPU-enabled and WebGPU-disabled browser setups).
   - *Acceptance:* Verified non-blank rendered Linux framebuffer in real Chromium `<canvas>`.
   - *Verification:* Playwright canvas pixel inspection evidence in `docs/TEST_REPORT.md`.
 
