@@ -24,19 +24,30 @@ jobs:
   busybox-initramfs:
     name: BusyBox (riscv64) + Vanilla initramfs
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
-      - name: Install cross toolchain
+      - name: Install host tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y gcc-riscv64-linux-gnu qemu-user-static file cpio gzip bc
+          sudo apt-get install -y qemu-user-static file cpio gzip bc texinfo
+      - name: Cache the soft-float musl cross toolchain
+        id: musl-cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/guest/build/musl-cross
+          key: musl-rv64imac-lp64-${{ hashFiles('guest/scripts/build-musl-toolchain.sh') }}
+      - name: Build soft-float musl cross toolchain (distro glibc is lp64d-only)
+        if: steps.musl-cache.outputs.cache-hit != 'true'
+        run: ./guest/scripts/build-musl-toolchain.sh "$GITHUB_WORKSPACE/guest/build/musl-cross"
+      - name: Use the musl toolchain for the BusyBox build
+        run: echo "$GITHUB_WORKSPACE/guest/build/musl-cross/bin" >> "$GITHUB_PATH"
       - name: Resolve upstream versions (no hardcoding)
         run: ./guest/scripts/versions.sh all
       - name: Build BusyBox and enforce applet list
         run: |
           set -o pipefail
-          ./guest/scripts/build-busybox.sh "$GITHUB_WORKSPACE/guest/build/vanilla-rootfs" 2>&1 | tee busybox-build.log
+          CROSS_COMPILE=riscv64-linux-musl- ./guest/scripts/build-busybox.sh "$GITHUB_WORKSPACE/guest/build/vanilla-rootfs" 2>&1 | tee busybox-build.log
       - name: Behaviour-test the riscv64 BusyBox under qemu-user
         run: |
           QEMU=$(command -v qemu-riscv64-static)
