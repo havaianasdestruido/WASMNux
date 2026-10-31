@@ -74,7 +74,13 @@ jobs:
             printf '<!-- wasmnux-diagnostics guest-log run-%s sha-%s -->\n' "$GITHUB_RUN_ID" "$GITHUB_SHA"
             printf '**CI diagnostics:** guest busybox/initramfs job failed in run %s.\n\n```\n' "$GITHUB_RUN_ID"
             for f in musl-toolchain.log busybox-build.log; do
-              if [ -f "$f" ]; then printf '### %s (tail)\n' "$f"; tail -n 150 "$f" | head -c 18000; printf '\n'; fi
+              if [ -f "$f" ]; then
+                printf '### %s (error lines)\n' "$f"
+                grep -n -i -m 40 -E "error:|Error [0-9]|No such file|not found|FAILED|Killed|Out of memory" "$f" | head -c 9000 || true
+                printf '\n### %s (tail)\n' "$f"
+                tail -n 60 "$f" | head -c 9000
+                printf '\n'
+              fi
             done
             printf '\n```\n'
           } > comment.md
