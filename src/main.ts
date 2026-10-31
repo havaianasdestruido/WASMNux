@@ -1,9 +1,12 @@
+import './styles.css';
+
 import { FramebufferDisplayController } from './gpu/display-controller';
 import { BootOrchestrator } from './runtime/boot-orchestrator';
 import { detectBrowserCapabilities } from './runtime/capabilities';
 import { VmClient } from './runtime/vm-client';
 import { crc32 } from './storage/crc32';
 import { PersistentStorageEngine } from './storage/storage-engine';
+import { AppShell } from './ui/app-shell';
 import { WasmVmRuntime } from './wasm/bindings';
 import { buildRiscvMiniSmokeKernel } from './wasm/test-mini-kernel';
 
@@ -15,6 +18,7 @@ declare global {
     };
     __WASMNUX_BOOT_ORCHESTRATOR_CTOR__?: typeof BootOrchestrator;
     __WASMNUX_DISPLAY_CONTROLLER_CTOR__?: typeof FramebufferDisplayController;
+    __WASMNUX_APP_SHELL__?: AppShell;
   }
 }
 
@@ -90,30 +94,37 @@ async function runWorkerSmokeCheck(wasmUrl: string): Promise<{
   }
 }
 
+function registerPwaServiceWorker(): void {
+  if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      void navigator.serviceWorker.register('./sw.js').catch(() => {
+        // Ignore ServiceWorker registration failure in restricted/file contexts
+      });
+    });
+  }
+}
+
 async function bootstrap(): Promise<void> {
   const root = document.getElementById('app');
   if (!root) {
     return;
   }
 
+  registerPwaServiceWorker();
   const caps = await detectBrowserCapabilities();
   const wasmUrl = new URL('./wasm/wasmnux_wasm.wasm', window.location.href).href;
   const rt = await WasmVmRuntime.fromUrl(wasmUrl);
   const abiVersion = rt.abiVersion;
   const workerSmoke = await runWorkerSmokeCheck(wasmUrl);
 
-  const container = document.createElement('main');
-  container.dataset['ready'] = 'true';
-
-  const heading = document.createElement('h1');
-  heading.textContent = 'WASMNux Runtime Foundation';
-
-  const status = document.createElement('pre');
-  status.id = 'capability-report';
-  status.textContent = JSON.stringify({ abiVersion, workerSmoke, capabilities: caps }, null, 2);
-
-  container.append(heading, status);
-  root.replaceChildren(container);
+  const shell = new AppShell(root, {
+    abiVersion,
+    wasmUrl,
+    capabilities: caps,
+    workerSmoke,
+  });
+  await shell.mount();
+  window.__WASMNUX_APP_SHELL__ = shell;
 }
 
 void bootstrap();

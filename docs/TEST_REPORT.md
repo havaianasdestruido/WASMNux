@@ -96,6 +96,16 @@ This report tracks verification evidence for every completed phase and requireme
 | `P7-02` | Live Linux `7.3.1` `/dev/fb0` `wasmnux-fbtest` -> WebGPU compute (`rgba8unorm`) + render + `device.lost` recovery + resize | Playwright `1.64.1` + Chromium `153.0.0` (`google / swiftshader`) | `npx playwright test tests/e2e/webgpu-graphics.spec.ts` | `readRgbaPixels()` matches `[56, 189, 248, 255]` & `[239, 68, 68, 255]`; `simulateDeviceLoss()` recovers (`deviceLostRecoveries >= 1`) and preserves shadow frame while Linux continues executing | `PASS (4.4s)` | PASS |
 | `P7-03` | Automatic `Canvas2DFramebufferRenderer` fallback when `navigator.gpu` is unavailable | Playwright `1.64.1` + Chromium `153.0.0` (`navigator.gpu = undefined`) | `npx playwright test tests/e2e/webgpu-graphics.spec.ts` | `activeBackend === "canvas2d"`, identical `[56, 189, 248, 255]` & `[239, 68, 68, 255]` pixel output | `PASS (4.4s)` | PASS |
 
+---
+
+## Phase 8 — Browser Interface (`@xterm/xterm`, Controls, Snapshots, Diagnostics, & PWA) Evidence
+
+| Test ID | Requirement Covered | Environment | Exact Command / Procedure | Expected Result | Actual Result | Status |
+|---|---|---|---|---|---|---|
+| `P8-01` | Kernel milestone detector, ANSI stripping, log filtering, UART paste flow-control chunking, & preference schema guard | Vitest `3.2.7` | `npx vitest run tests/unit/ui-helpers.test.ts` | Detects all 6 kernel/init milestones, bounds UART paste chunks `<= 32` B, rejects malformed preference payloads | `3 passed (5ms)` | PASS |
+| `P8-02` | Full Browser UI E2E: interactive `@xterm/xterm` guest typing, `Ctrl+C`, Pause/Resume, gzipped VM snapshot save, invalid `.wasmnux-disk` import error banner, profile switcher, reload settings persistence, & PWA Service Worker | Playwright `1.64.1` + Chromium `153.0.0` | `npx playwright test tests/e2e/browser-interface.spec.ts` | Boots Linux `7.3.1` via UI button, echoes `XTERM_REAL_GUEST_42`, saves `ui-checkpoint`, rejects corrupt disk import via banner, persists `debian` + `amber` theme across reload, `swRegistered: true`, `pageErrors: 0` | `PASS (6.8s)` | PASS |
+
+
 
 
 

@@ -61,6 +61,36 @@ export function getLinuxProfile(id: LinuxProfileId): LinuxProfileDefinition {
 }
 
 /**
+ * Compress a `Uint8Array` using native `CompressionStream('gzip')`.
+ */
+export async function compressGzip(input: Uint8Array): Promise<Uint8Array> {
+  const cs = new CompressionStream('gzip');
+  const writer = cs.writable.getWriter();
+  const writePromise = writer.write(new Uint8Array(input)).then(() => writer.close());
+
+  const reader = cs.readable.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const step = await reader.read();
+    if (step.done) {
+      break;
+    }
+    chunks.push(step.value);
+    total += step.value.byteLength;
+  }
+  await writePromise;
+
+  const out = new Uint8Array(total);
+  let offset = 0;
+  for (const c of chunks) {
+    out.set(c, offset);
+    offset += c.byteLength;
+  }
+  return out;
+}
+
+/**
  * Decompress a Gzipped `Uint8Array` (or return unchanged if it does not begin with Gzip magic `1f 8b`).
  */
 export async function decompressGzipIfNeeded(input: Uint8Array): Promise<Uint8Array> {

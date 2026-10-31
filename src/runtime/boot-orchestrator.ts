@@ -170,6 +170,48 @@ export class BootOrchestrator {
     return this.client.sendSerialInput(data);
   }
 
+  public pause(): Promise<void> {
+    if (!this.client) {
+      return Promise.reject(new Error('No active VM session'));
+    }
+    return this.client.pauseVm();
+  }
+
+  public resume(): Promise<void> {
+    if (!this.client) {
+      return Promise.reject(new Error('No active VM session'));
+    }
+    return this.client.resumeVm();
+  }
+
+  public hardReset(): Promise<void> {
+    if (!this.client) {
+      return Promise.reject(new Error('No active VM session'));
+    }
+    return this.client.hardResetVm();
+  }
+
+  public async setNetworkEnabled(enabled: boolean): Promise<void> {
+    this.networkEnabled = enabled;
+    if (this.client !== null) {
+      await this.client.setNetworkEnabled(enabled);
+    }
+  }
+
+  public saveFullSnapshot(): Promise<Uint8Array> {
+    if (!this.client) {
+      return Promise.reject(new Error('No active VM session'));
+    }
+    return this.client.saveSnapshot();
+  }
+
+  public restoreFullSnapshot(snapshot: Uint8Array): Promise<void> {
+    if (!this.client) {
+      return Promise.reject(new Error('No active VM session'));
+    }
+    return this.client.restoreSnapshot(snapshot);
+  }
+
   public async waitForPendingStorageCommits(): Promise<void> {
     await this.pendingFlushChain;
   }
