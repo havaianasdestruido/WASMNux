@@ -9,7 +9,11 @@ UNPACK_DIR="${TOOLS_DIR}/unpack"
 
 mkdir -p "${RUST_DIR}" "${LLVM_DIR}" "${DL_DIR}" "${UNPACK_DIR}"
 
-if ! command -v rustc >/dev/null 2>&1 || ! rustc --print target-libdir --target wasm32-unknown-unknown >/dev/null 2>&1; then
+if command -v rustup >/dev/null 2>&1 && command -v rustc >/dev/null 2>&1; then
+  echo "[setup-toolchains] Ensuring wasm32-unknown-unknown + rustfmt + clippy via rustup..."
+  rustup target add wasm32-unknown-unknown
+  rustup component add rustfmt clippy
+elif ! command -v rustc >/dev/null 2>&1 || ! rustc --print target-libdir --target wasm32-unknown-unknown >/dev/null 2>&1; then
   echo "[setup-toolchains] Installing Rust 1.88.0 + wasm32-unknown-unknown + rustfmt + clippy + llvm-tools..."
   pushd "${DL_DIR}" >/dev/null
   rm -f ./*.tgz

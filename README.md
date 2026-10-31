@@ -9,8 +9,8 @@
 ## Key Capabilities
 
 - **Two Isolated Linux Profiles** (independent `ext4` overlays, snapshots, settings, and factory reset):
-  1. **Vanilla Linux (`7.3.1` + BusyBox `1.36.1`)**: Cold-boots to root shell in **~2.0 seconds** (`61.7M` instructions, ~30 MIPS), static `riscv64-linux-musl` BusyBox `1.36.1` with 300+ applets, persistent 64 MiB `ext4` `/dev/vda`, and `/usr/bin/wasmnux-fbtest` `/dev/fb0` graphics generator.
-  2. **Debian `13.7` ("trixie") `riscv64`**: Cold-boots official Debian 13.7 `riscv64` (`glibc 2.41`, `bash 5.2`, GNU `coreutils 9.7`, `apt 3.0.3`, `dpkg 1.22.22`, BusyBox) in **~2.9 seconds**, supporting real `apt-get update`, `apt-get install`, dependency resolution, and `apt-get remove` over `VirtIO-Net` (`eth0`) with persistent `/var/lib/dpkg/status` across browser restarts and offline `.deb` usability.
+  1. **Vanilla Linux (`7.3.1` + BusyBox `1.36.1`)**: Cold-boots to root shell in **~2.52 seconds** median (`[2662.3, 2517.4, 2507.3]` ms across 3 trials on 2-vCPU Xeon @ 2.60 GHz; `62.1M` instructions, `24.8 MIPS`), static `riscv64-linux-musl` BusyBox `1.36.1` with 300+ applets, persistent 64 MiB `ext4` `/dev/vda`, and `/usr/bin/wasmnux-fbtest` `/dev/fb0` graphics generator.
+  2. **Debian `13.7` ("trixie") `riscv64`**: Cold-boots official Debian 13.7 `riscv64` (`glibc 2.41`, `bash 5.2`, GNU `coreutils 9.7`, `apt 3.0.3`, `dpkg 1.22.22`, BusyBox) in **~3.25 seconds** median (`[3249.0, 3256.0, 3171.5]` ms across 3 trials; `78.0M` instructions, `24.0 MIPS`), supporting real `apt-get update`, `apt-get install`, dependency resolution, and `apt-get remove` over `VirtIO-Net` (`eth0`) with persistent `/var/lib/dpkg/status` across browser restarts and offline `.deb` usability.
 - **Rust -> WebAssembly Virtualization Core (`crates/wasmnux-*`)**:
   - `RV64IMAFDC` + `Zicsr` + `Zifencei`, Machine/Supervisor/User privilege rings, `Sv39` 3-level MMU with direct-mapped `ITLB`/`DTLB` fast paths, `SBI v0.2`, `CLINT` (`WFI` timer fast-forward), `PLIC`, `NS16550A` UART, `Goldfish RTC`, `Syscon` poweroff/reboot, `SimpleFB` (`640x400` `BGRX8888` dirty-row bitmap), and `VirtIO MMIO v2` (`virtio-blk`, `virtio-net`, `virtio-rng`).
   - Runs off the main UI thread in a dedicated Web Worker; works with **or without** `SharedArrayBuffer` / `crossOriginIsolated`.
@@ -64,16 +64,16 @@ npm run bench
 npm run test:e2e
 ```
 
-### Measured Performance Summary (`docs/BENCHMARKS.md`)
+### Measured Performance Summary (`docs/BENCHMARKS.md` — `2026-10-31T23:35:44.846Z`, 2-vCPU Xeon @ 2.60 GHz)
 
-| Metric | Measured Value |
+| Metric | Measured Value (`N=3` boots / snapshots, `N=5` RTT) |
 |---|---|
-| `wasmnux_wasm.wasm` release binary | **304.6 KiB** (`311,929` bytes, 0 external crates) |
-| **Vanilla Linux `7.3.1`** cold boot to shell | **2.04 s** (`30.3 MIPS`, `144.6 MiB` WASM memory) |
-| **Debian `13.7` ("trixie")** cold boot to `bash` | **2.90 s** (`26.8 MIPS`, `344.8 MiB` WASM memory) |
-| Terminal serial round-trip latency (min / median) | **3.25 ms / 14.81 ms** |
-| Guest `ext4` `/dev/vda` 4 MiB write / uncached read | **84.8 MiB/s** / **7.0 MiB/s** |
-| Live 128 MiB VM snapshot size (gzip) & restore time | **5.32 MiB** (24.9x ratio) / **171.1 ms** |
+| `wasmnux_wasm.wasm` release binary | **304.6 KiB** (`311,906` bytes, 0 external crates) |
+| **Vanilla Linux `7.3.1`** cold boot to shell (median) | **2,517.4 ms** (`[2662.3, 2517.4, 2507.3]` ms, **24.8 MIPS**, `144.6 MiB` WASM memory) |
+| **Debian `13.7` ("trixie")** cold boot to `bash` (median) | **3,249.0 ms** (`[3249.0, 3256.0, 3171.5]` ms, **24.0 MIPS**, `344.8 MiB` WASM memory) |
+| Terminal serial round-trip latency (min / median / max) | **3.93 ms / 12.92 ms / 30.51 ms** (`[12.92, 21.84, 4.05, 30.51, 3.93]` ms) |
+| Guest `ext4` `/dev/vda` 4 MiB `urandom+fsync` write / uncached read | **66.4 MiB/s** (`60.3 ms`) / **375.6 MiB/s** (`10.7 ms`) |
+| Live 128 MiB VM snapshot size (gzip) & restore time | **5.23 MiB** (24.5x ratio) / **40.6 ms** median (`145.0 ms` cold Trial 1) |
 
 ---
 

@@ -42,10 +42,10 @@ Guest OS images executed inside the virtual machine are separate guest software 
 |---|---|---|---|
 | `typescript` | `~5.8.3` | Apache-2.0 | Strict TypeScript typechecker |
 | `vite` | `^6.4.5` | MIT | ES module dev server & production bundler |
-| `vitest` | `^3.2.4` | MIT | Unit, integration, security, and benchmark test runner |
+| `vitest` | `^5.0.5` | MIT | Unit, integration, security, and benchmark test runner |
 | `@playwright/test` | `^1.64.1` | Apache-2.0 | End-to-end Chromium browser automation |
 | `@sparticuz/chromium` | `^153.0.0` | Apache-2.0 | Headless Chromium 153 binary with SwiftShader WebGPU |
-| `eslint` / `@eslint/js` / `typescript-eslint` | `^9.39.0` / `^8.33.0` | MIT | `strictTypeChecked` static analysis |
+| `eslint` / `@eslint/js` / `typescript-eslint` | `^10.14.0` / `^10.0.1` / `^8.72.1` | MIT | `strictTypeChecked` static analysis (`overrides.minimatch@^11.0.3`) |
 | `prettier` | `^3.5.3` | MIT | Deterministic code formatting |
 | `fake-indexeddb` | `^6.2.7` | Apache-2.0 | IndexedDB W3C spec test polyfill for Node unit tests |
 | `@webgpu/types` | `^0.1.74` | BSD-3-Clause | Official W3C WebGPU TypeScript definitions |

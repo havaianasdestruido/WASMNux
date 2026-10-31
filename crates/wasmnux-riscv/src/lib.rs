@@ -632,4 +632,101 @@ mod tests {
         assert_eq!(vm.bus.fb.take_dirty_range(), Some((10, 11)));
         assert_eq!(vm.bus.fb.take_dirty_range(), None);
     }
+
+    #[test]
+    fn rv64m_div_rem_zero_and_overflow_semantics_match_isa_spec() {
+        fn enc_r(funct7: u32, rs2: u32, rs1: u32, funct3: u32, rd: u32, opcode: u32) -> u32 {
+            (funct7 << 25) | (rs2 << 20) | (rs1 << 15) | (funct3 << 12) | (rd << 7) | opcode
+        }
+
+        let mut vm = RiscvMachine::new(16 * 1024 * 1024, 1_760_000_000_000_000_000);
+        let base = GUEST_RAM_BASE;
+
+        // Place 8 RV64M instructions reading x1 (dividend), x2 (divisor) -> x3..x10:
+        // x3 = DIV, x4 = DIVU, x5 = REM, x6 = REMU, x7 = DIVW, x8 = DIVUW, x9 = REMW, x10 = REMUW
+        let prog = [
+            enc_r(0x01, 2, 1, 4, 3, 0x33),
+            enc_r(0x01, 2, 1, 5, 4, 0x33),
+            enc_r(0x01, 2, 1, 6, 5, 0x33),
+            enc_r(0x01, 2, 1, 7, 6, 0x33),
+            enc_r(0x01, 2, 1, 4, 7, 0x3B),
+            enc_r(0x01, 2, 1, 5, 8, 0x3B),
+            enc_r(0x01, 2, 1, 6, 9, 0x3B),
+            enc_r(0x01, 2, 1, 7, 10, 0x3B),
+        ];
+        write_prog(&mut vm, base, &prog);
+
+        // Case 1: Division by zero (Table 7.1 of RISC-V Unprivileged Spec)
+        let dividend = 0x1234_5678_9ABC_DEF0u64;
+        vm.hart.pc = base;
+        vm.hart.regs[1] = dividend;
+        vm.hart.regs[2] = 0;
+        let _ = vm.step_slice(8);
+        assert_eq!(vm.hart.regs[3], u64::MAX, "DIV by 0 => -1 (all ones)");
+        assert_eq!(vm.hart.regs[4], u64::MAX, "DIVU by 0 => 2^XLEN - 1");
+        assert_eq!(vm.hart.regs[5], dividend, "REM by 0 => dividend");
+        assert_eq!(vm.hart.regs[6], dividend, "REMU by 0 => dividend");
+        assert_eq!(vm.hart.regs[7], u64::MAX, "DIVW by 0 => -1 sign-extended");
+        assert_eq!(
+            vm.hart.regs[8],
+            u64::MAX,
+            "DIVUW by 0 => u32::MAX sign-extended"
+        );
+        assert_eq!(
+            vm.hart.regs[9],
+            ((dividend as u32) as i32) as i64 as u64,
+            "REMW by 0 => lower 32b sign-extended"
+        );
+        assert_eq!(
+            vm.hart.regs[10],
+            ((dividend as u32) as i32) as i64 as u64,
+            "REMUW by 0 => lower 32b sign-extended"
+        );
+
+        // Case 2: 64-bit signed overflow (i64::MIN / -1 => i64::MIN, REM => 0)
+        vm.hart.pc = base;
+        vm.hart.regs[1] = i64::MIN as u64;
+        vm.hart.regs[2] = (-1i64) as u64;
+        let _ = vm.step_slice(8);
+        assert_eq!(
+            vm.hart.regs[3],
+            i64::MIN as u64,
+            "DIV i64::MIN / -1 => i64::MIN"
+        );
+        assert_eq!(vm.hart.regs[4], 0, "DIVU 0x8000..0 / 0xFFFF..F => 0");
+        assert_eq!(vm.hart.regs[5], 0, "REM i64::MIN % -1 => 0");
+        assert_eq!(
+            vm.hart.regs[6],
+            i64::MIN as u64,
+            "REMU 0x8000..0 % 0xFFFF..F => dividend"
+        );
+
+        // Case 3: 32-bit signed overflow (i32::MIN / -1 => sign-extended i32::MIN, REMW => 0)
+        vm.hart.pc = base;
+        vm.hart.regs[1] = 0x0000_0000_8000_0000u64;
+        vm.hart.regs[2] = 0x0000_0000_FFFF_FFFFu64;
+        let _ = vm.step_slice(8);
+        assert_eq!(
+            vm.hart.regs[7],
+            (i32::MIN as i64) as u64,
+            "DIVW i32::MIN / -1 => 0xFFFF_FFFF_8000_0000"
+        );
+        assert_eq!(vm.hart.regs[8], 0, "DIVUW 0x8000_0000 / 0xFFFF_FFFF => 0");
+        assert_eq!(vm.hart.regs[9], 0, "REMW i32::MIN % -1 => 0");
+        assert_eq!(
+            vm.hart.regs[10],
+            (i32::MIN as i64) as u64,
+            "REMUW 0x8000_0000 % 0xFFFF_FFFF => sign-extended 0x8000_0000"
+        );
+
+        // Case 4: Standard signed/unsigned quotient & remainder (-47 / 6 = -7 rem -5)
+        vm.hart.pc = base;
+        vm.hart.regs[1] = (-47i64) as u64;
+        vm.hart.regs[2] = 6;
+        let _ = vm.step_slice(8);
+        assert_eq!(vm.hart.regs[3], (-7i64) as u64);
+        assert_eq!(vm.hart.regs[5], (-5i64) as u64);
+        assert_eq!(vm.hart.regs[7], (-7i64) as u64);
+        assert_eq!(vm.hart.regs[9], (-5i64) as u64);
+    }
 }

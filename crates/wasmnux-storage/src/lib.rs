@@ -179,7 +179,7 @@ impl SparseBlockDisk {
     pub fn new(capacity_bytes: u64) -> Result<Self, StorageError> {
         if capacity_bytes == 0
             || capacity_bytes > MAX_DISK_CAPACITY_BYTES
-            || (capacity_bytes % (CHUNK_SIZE as u64)) != 0
+            || !capacity_bytes.is_multiple_of(CHUNK_SIZE as u64)
         {
             return Err(StorageError::InvalidCapacity(capacity_bytes));
         }

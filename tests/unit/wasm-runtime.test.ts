@@ -22,15 +22,15 @@ describe('WASM Runtime Bindings & Worker Bridge (Phase 3)', () => {
     expect(rt.linearMemoryBytes).toBeGreaterThanOrEqual(65536);
 
     // Invalid profile ID rejected with typed VmRuntimeError
-    expect(() => rt.createVm({ profileId: '../escape', ramMib: 32, diskMib: 8 })).toThrowError(
+    expect(() => rt.createVm({ profileId: '../escape', ramMib: 32, diskMib: 8 })).toThrow(
       VmRuntimeError,
     );
 
     // Out-of-bounds RAM configuration rejected gracefully
-    expect(() => rt.createVm({ profileId: 'vanilla', ramMib: 4, diskMib: 8 })).toThrowError(
+    expect(() => rt.createVm({ profileId: 'vanilla', ramMib: 4, diskMib: 8 })).toThrow(
       VmRuntimeError,
     );
-    expect(() => rt.createVm({ profileId: 'vanilla', ramMib: 4096, diskMib: 8 })).toThrowError(
+    expect(() => rt.createVm({ profileId: 'vanilla', ramMib: 4096, diskMib: 8 })).toThrow(
       VmRuntimeError,
     );
 
@@ -39,15 +39,15 @@ describe('WASM Runtime Bindings & Worker Bridge (Phase 3)', () => {
     vm.stageKernel(new Uint8Array(0));
     expect(() => {
       vm.boot('console=ttyS0');
-    }).toThrowError(VmRuntimeError);
+    }).toThrow(VmRuntimeError);
 
     // Corrupt snapshot & corrupt disk bundle rejected cleanly
     expect(() => {
       vm.restoreFullSnapshot(new Uint8Array([1, 2, 3, 4]));
-    }).toThrowError(VmRuntimeError);
+    }).toThrow(VmRuntimeError);
     expect(() => {
       vm.importDiskBundle(new Uint8Array([9, 9, 9]));
-    }).toThrowError(VmRuntimeError);
+    }).toThrow(VmRuntimeError);
     vm.destroy();
   });
 

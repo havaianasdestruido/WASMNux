@@ -859,7 +859,7 @@ impl Hart {
                 let imm12 = instr >> 20;
                 let imm = ((instr as i32) >> 20) as i64 as u64;
                 let src = self.regs[rs1];
-                let shamt = (imm12 & 0x3F) as u32;
+                let shamt = imm12 & 0x3F;
                 let top6 = imm12 >> 6;
                 let res = match funct3 {
                     0 => src.wrapping_add(imm),
@@ -910,8 +910,8 @@ impl Hart {
                 let imm = ((instr as i32) >> 20) as i64 as u64;
                 let src64 = self.regs[rs1];
                 let src32 = src64 as u32;
-                let shamt5 = (imm12 & 0x1F) as u32;
-                let shamt6 = (imm12 & 0x3F) as u32;
+                let shamt5 = imm12 & 0x1F;
+                let shamt6 = imm12 & 0x3F;
                 let res = match funct3 {
                     0 => ((src32.wrapping_add(imm as u32)) as i32) as i64 as u64,
                     1 => match imm12 {
@@ -958,39 +958,21 @@ impl Hart {
                     (0x01, 4) => {
                         let x = a as i64;
                         let y = b as i64;
-                        if y == 0 {
-                            u64::MAX
-                        } else if x == i64::MIN && y == -1 {
-                            x as u64
-                        } else {
-                            (x / y) as u64
+                        match y {
+                            0 => u64::MAX,
+                            _ => x.wrapping_div(y) as u64,
                         }
                     }
-                    (0x01, 5) => {
-                        if b == 0 {
-                            u64::MAX
-                        } else {
-                            a / b
-                        }
-                    }
+                    (0x01, 5) => a.checked_div(b).unwrap_or(u64::MAX),
                     (0x01, 6) => {
                         let x = a as i64;
                         let y = b as i64;
-                        if y == 0 {
-                            x as u64
-                        } else if x == i64::MIN && y == -1 {
-                            0
-                        } else {
-                            (x % y) as u64
+                        match y {
+                            0 => x as u64,
+                            _ => x.wrapping_rem(y) as u64,
                         }
                     }
-                    (0x01, 7) => {
-                        if b == 0 {
-                            a
-                        } else {
-                            a % b
-                        }
-                    }
+                    (0x01, 7) => a.checked_rem(b).unwrap_or(a),
                     // Zba: SH1ADD / SH2ADD / SH3ADD
                     (0x10, 2) => b.wrapping_add(a << 1),
                     (0x10, 4) => b.wrapping_add(a << 2),
@@ -1034,33 +1016,27 @@ impl Hart {
                     (0x01, 4) => {
                         let x = a as i32;
                         let y = b as i32;
-                        let r = if y == 0 {
-                            -1
-                        } else if x == i32::MIN && y == -1 {
-                            x
-                        } else {
-                            x / y
+                        let r = match y {
+                            0 => -1,
+                            _ => x.wrapping_div(y),
                         };
                         r as i64 as u64
                     }
                     (0x01, 5) => {
-                        let r = if b == 0 { u32::MAX } else { a / b };
+                        let r = a.checked_div(b).unwrap_or(u32::MAX);
                         (r as i32) as i64 as u64
                     }
                     (0x01, 6) => {
                         let x = a as i32;
                         let y = b as i32;
-                        let r = if y == 0 {
-                            x
-                        } else if x == i32::MIN && y == -1 {
-                            0
-                        } else {
-                            x % y
+                        let r = match y {
+                            0 => x,
+                            _ => x.wrapping_rem(y),
                         };
                         r as i64 as u64
                     }
                     (0x01, 7) => {
-                        let r = if b == 0 { a } else { a % b };
+                        let r = a.checked_rem(b).unwrap_or(a);
                         (r as i32) as i64 as u64
                     }
                     // Zba: ADD.UW / SH1ADD.UW / SH2ADD.UW / SH3ADD.UW + Zbb ZEXT.H

@@ -34,10 +34,10 @@ describe('Persistent Virtual Storage Engine (Phase 4)', () => {
 
     expect(() => {
       validateStorageIdentifier('../traversal');
-    }).toThrowError(StorageValidationError);
+    }).toThrow(StorageValidationError);
     expect(() => {
       validateStorageIdentifier('UPPERCASE');
-    }).toThrowError(StorageValidationError);
+    }).toThrow(StorageValidationError);
 
     // Encode a bundle in TypeScript and import it directly into Rust WASM SparseBlockDisk!
     const c2 = makeChunk(2, 0x7a);
@@ -85,7 +85,7 @@ describe('Persistent Virtual Storage Engine (Phase 4)', () => {
 
     await expect(
       engine.commitDirtyChunks('vanilla', cap, [badBatchC0, badBatchC5]),
-    ).rejects.toThrowError(StorageValidationError);
+    ).rejects.toThrow(StorageValidationError);
     adapter.onBeforeWriteChunk = undefined;
 
     // Also plant an orphan uncommitted g99 chunk simulating abrupt tab kill before cleanup
@@ -101,9 +101,9 @@ describe('Persistent Virtual Storage Engine (Phase 4)', () => {
 
     // Quota limit check: cap at 2 overlay chunks -> writing chunk 9 must reject without corrupting!
     engine.setMaxOverlayChunksPerProfile(2);
-    await expect(
-      engine.commitDirtyChunks('vanilla', cap, [makeChunk(9, 0x44)]),
-    ).rejects.toThrowError(StorageValidationError);
+    await expect(engine.commitDirtyChunks('vanilla', cap, [makeChunk(9, 0x44)])).rejects.toThrow(
+      StorageValidationError,
+    );
     engine.setMaxOverlayChunksPerProfile(null);
 
     // Resetting 'vanilla' leaves 'debian' 100% intact
@@ -139,12 +139,12 @@ describe('Persistent Virtual Storage Engine (Phase 4)', () => {
     const validBundle = await engine.exportProfileDiskBundle('vanilla', cap);
     const tampered = validBundle.slice();
     tampered[40] = (tampered[40] ?? 0) ^ 0xff;
-    await expect(engine.importProfileDiskBundle('vanilla', tampered)).rejects.toThrowError(
+    await expect(engine.importProfileDiskBundle('vanilla', tampered)).rejects.toThrow(
       StorageValidationError,
     );
 
     // Wrong target profile ('debian') rejects 'vanilla' bundle
-    await expect(engine.importProfileDiskBundle('debian', validBundle)).rejects.toThrowError(
+    await expect(engine.importProfileDiskBundle('debian', validBundle)).rejects.toThrow(
       StorageValidationError,
     );
   });
