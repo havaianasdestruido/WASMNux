@@ -12,7 +12,9 @@ export type AssetState =
   | { readonly kind: "missing"; readonly detail: string }
   | { readonly kind: "invalid"; readonly detail: string };
 
-type FetchFn = (input: string) => Promise<Pick<Response, "ok" | "status" | "json" | "arrayBuffer">>;
+type FetchFn = (input: string) => Promise<
+  Pick<Response, "ok" | "status" | "json" | "arrayBuffer" | "headers">
+>;
 
 const defaultFetch: FetchFn = (input) => fetch(input);
 
@@ -29,6 +31,16 @@ export async function probeGuestAssets(
     return {
       kind: "missing",
       detail: `could not fetch ${url}: ${error instanceof Error ? error.message : String(error)}`,
+    };
+  }
+  // Dev servers (and some static hosts) answer unknown paths with the SPA
+  // index.html and HTTP 200 — that is not a manifest; treat it as missing
+  // instead of feeding HTML to the JSON parser.
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!contentType.includes("json")) {
+    return {
+      kind: "missing",
+      detail: `${url} is not served as JSON (got "${contentType || "no content-type"}"). Build the guest assets with the pipeline in guest/scripts (or download the CI guest artifact) and place them under web/public/${profile.assetPath}/.`,
     };
   }
   if (response.status === 404 || !response.ok) {

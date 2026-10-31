@@ -69,6 +69,7 @@ describe("guest asset probing", () => {
       Promise.resolve({
         ok: false,
         status: 404,
+        headers: new Headers(),
         json: () => Promise.reject(new Error("no body")),
         arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)),
       }),
@@ -91,6 +92,7 @@ describe("guest asset probing", () => {
       Promise.resolve({
         ok: true,
         status: 200,
+        headers: new Headers({ "content-type": "application/json" }),
         json: () => Promise.resolve(manifest),
         arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)),
       }),
@@ -101,11 +103,28 @@ describe("guest asset probing", () => {
       Promise.resolve({
         ok: true,
         status: 200,
+        headers: new Headers({ "content-type": "application/json" }),
         json: () => Promise.resolve({ profile: "Debian" }),
         arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)),
       }),
     );
     expect(badState.kind).toBe("invalid");
+  });
+
+  it("treats an SPA-fallback HTML 200 as missing, not as a parse error", async () => {
+    const state = await probeGuestAssets(PROFILES.vanilla, () =>
+      Promise.resolve({
+        ok: true,
+        status: 200,
+        headers: new Headers({ "content-type": "text/html" }),
+        json: () => Promise.reject(new Error("Unexpected token '<'")),
+        arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)),
+      }),
+    );
+    expect(state.kind).toBe("missing");
+    if (state.kind === "missing") {
+      expect(state.detail).toMatch(/not served as JSON/);
+    }
   });
 
 });
