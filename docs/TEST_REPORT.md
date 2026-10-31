@@ -75,6 +75,18 @@ This report tracks verification evidence for every completed phase and requireme
 | `P5-04` | Guest `reboot`, `poweroff`, & `ext4` `/dev/vda` persistence | Vitest `3.2.7` | `npm test` (`tests/unit/vanilla-linux.test.ts`) | `/root/persist-proof.txt` survives in-place `reboot` (`hardReset`) AND `poweroff` -> `PersistentStorageEngine` commit -> fresh VM cold boot | `REBOOT_CHECK_OK` & `COLD_PERSIST_OK` verified (`9.26s` total) | PASS |
 | `P5-05` | Real Chromium 153 Web Worker Vanilla Linux `7.3.1` boot + OPFS reload persistence | Playwright `1.64.1` + Chromium `153.0.0` | `npm run test:e2e` (`tests/e2e/vanilla-linux.spec.ts`) | Boots Linux `7.3.1` in Dedicated Web Worker, writes `/root/e2e.txt` on `ext4`, powers off, reloads tab, re-boots Linux `7.3.1`, reads `/root/e2e.txt` from OPFS+IDB | `3 passed (10.8s)` (`storageMode: "opfs+idb"`, `persistedContentFound: true`) | PASS |
 
+---
+
+## Phase 6 & Phase 9 — Debian `13.7 "trixie"` `riscv64` + Browser Network Bridge Evidence
+
+| Test ID | Requirement Covered | Environment | Exact Command / Procedure | Expected Result | Actual Result | Status |
+|---|---|---|---|---|---|---|
+| `P6-01` | Official Debian `13.7` (`trixie`) `riscv64` provenance + `ext4` image + APT repo | `debuerreotype/docker-debian-artifacts` `dist-riscv64` + `dpkg-deb` / `dpkg-scanpackages` | `./scripts/build-debian-rootfs.sh` | Verifies OCI SHA-256 `a81ae23cfcc12d03cee9e3704fa559c027af15fefe8c60924add8fd17e4c98c1` (`DEBIAN_VERSION_FULL=13.7`), builds `debian-rootfs.ext4.gz` (`29 MiB`) + `public/debian-repo` (`Packages` + `Packages.xz` + `Release` + 4 `.deb` packages) | Built & `e2fsck` verified | PASS |
+| `P6-02` | Boot Debian `13.7`, `bash 5.2`, `dpkg 1.22`, `apt 3.0`, BusyBox, `apt-get update/install/remove` + dependency resolution | Vitest `3.2.7` + `wasmnux_wasm.wasm` | `npx vitest run tests/unit/debian-linux.test.ts` | Resolves `wasmnux-sysbench` -> `wasmnux-hello` over `VirtioNet` TCP/IP, executes `riscv64` ELF binaries, removes `wasmnux-sysbench`, powers off cleanly, and verifies offline cold-reboot persistence + `dpkg -i` | `1 passed (63.6s)` | PASS |
+| `P6-03` | Real Chromium 153 Web Worker Debian `13.7` `apt-get install` + OPFS reload offline persistence | Playwright `1.64.1` + Chromium `153.0.0` | `npx playwright test tests/e2e/debian-linux.spec.ts` | Boots Debian `13.7` in Worker, runs `apt-get update && apt-get install -y wasmnux-hello` over Vite `/debian-repo/`, powers off, reloads tab with `networkEnabled: false`, verifies `dpkg -s wasmnux-hello` & executes binary | `1 passed (52.2s)` (`storageMode: "opfs+idb"`, `dpkgInstalled: true`, `helloPersisted: true`) | PASS |
+| `P9-01` | Browser HTTP Fetch bridge SSRF guardrails, path traversal blocking, & SPA fallback handling | Vitest `3.2.7` | `npx vitest run tests/unit/network-bridge.test.ts` | Blocks `localhost`, `127.*`, `169.254.*`, `192.168.*`, `172.16-31.*`, `[::1]`; maps `apt.wasmnux.local` -> same-origin `/debian-repo/*`; turns SPA `text/html` fallback into HTTP `404` | `3 passed (6ms)` | PASS |
+
+
 
 
 

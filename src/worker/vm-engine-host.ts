@@ -2,6 +2,7 @@
  * Cooperative WASM VM execution host used inside `vm.worker.ts` (and fallback cooperative mode).
  */
 
+import { executeBridgedHttpRequest } from '../net/network-bridge';
 import {
   VmRuntimeError,
   WasmVmRuntime,
@@ -25,6 +26,7 @@ export class VmEngineHost {
   private sliceSteps = DEFAULT_SLICE_STEPS;
   private lastTelemetryAt = 0;
   private lastDiskFlushAt = 0;
+  private networkEnabled = true;
 
   public constructor(emit: MessageSink) {
     this.emit = emit;
@@ -71,6 +73,7 @@ export class VmEngineHost {
           }
           vm.setDiskQuotaChunks(cmd.maxOverlayChunks);
           vm.setDiskReadOnly(cmd.readOnly);
+          this.networkEnabled = cmd.networkEnabled;
           vm.setNetworkEnabled(cmd.networkEnabled);
 
           this.session = vm;
@@ -182,6 +185,7 @@ export class VmEngineHost {
         }
         case 'set_network_enabled': {
           const vm = this.requireSession();
+          this.networkEnabled = cmd.enabled;
           vm.setNetworkEnabled(cmd.enabled);
           this.emit({ kind: 'rpc_ok', reqId: cmd.reqId });
           break;
@@ -311,72 +315,13 @@ export class VmEngineHost {
   }
 
   private async dispatchBridgedHttp(vm: WasmVmSession, req: BridgeHttpRequestMsg): Promise<void> {
-    const lowerHost = req.host.toLowerCase();
-    const isLocalMirror =
-      lowerHost === 'apt.wasmnux.local' ||
-      lowerHost === 'gateway.wasmnux.local' ||
-      lowerHost === '10.0.2.2' ||
-      lowerHost.startsWith('10.0.2.2:');
-
-    const safePath = req.path.startsWith('/') ? req.path : `/${req.path}`;
-    const origin =
-      typeof globalThis.location === 'object' && typeof globalThis.location.origin === 'string'
-        ? globalThis.location.origin
-        : '';
-
-    const targetUrl = isLocalMirror ? `${origin}${safePath}` : `https://${req.host}${safePath}`;
-
-    try {
-      const reqHeaders = new Headers();
-      for (const [k, v] of req.headers) {
-        const lk = k.toLowerCase();
-        if (lk !== 'host' && lk !== 'connection' && lk !== 'content-length') {
-          reqHeaders.set(k, v);
-        }
-      }
-      const method = req.method.toUpperCase();
-      const init: RequestInit = {
-        method,
-        headers: reqHeaders,
-      };
-      if (method !== 'GET' && method !== 'HEAD' && req.body.byteLength > 0) {
-        init.body = req.body.slice();
-      }
-      const resp = await fetch(targetUrl, init);
-      const bodyBuf = new Uint8Array(await resp.arrayBuffer());
-      const outHeaders: Array<readonly [string, string]> = [];
-      resp.headers.forEach((value, key) => {
-        const lk = key.toLowerCase();
-        if (lk !== 'content-encoding' && lk !== 'transfer-encoding' && lk !== 'content-length') {
-          outHeaders.push([key, value]);
-        }
-      });
-
-      if (!vm.isDestroyed) {
-        vm.completeHttpResponse({
-          requestId: req.requestId,
-          statusCode: resp.status,
-          statusText: resp.statusText || 'OK',
-          headers: outHeaders,
-          body: bodyBuf,
-        });
-        if (vm.getState() === 'running' && this.loopTimer === null) {
-          this.scheduleSlice(0);
-        }
-      }
-    } catch (err: unknown) {
-      const errText = err instanceof Error ? err.message : 'Browser fetch blocked or offline';
-      const body = new TextEncoder().encode(
-        `Bridge HTTP fetch failed (${targetUrl}): ${errText}\n`,
-      );
-      if (!vm.isDestroyed) {
-        vm.completeHttpResponse({
-          requestId: req.requestId,
-          statusCode: 502,
-          statusText: 'Bad Gateway',
-          headers: [['Content-Type', 'text/plain; charset=utf-8']],
-          body,
-        });
+    const response = await executeBridgedHttpRequest(req, {
+      networkEnabled: this.networkEnabled,
+    });
+    if (!vm.isDestroyed) {
+      vm.completeHttpResponse(response);
+      if (vm.getState() === 'running' && this.loopTimer === null) {
+        this.scheduleSlice(0);
       }
     }
   }

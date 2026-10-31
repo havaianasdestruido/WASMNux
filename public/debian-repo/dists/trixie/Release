@@ -1,0 +1,15 @@
+Origin: WASMNux
+Label: WASMNux Debian Repository
+Suite: stable
+Version: 13.7
+Codename: trixie
+Date: Sat, 31 Oct 2026 00:00:00 UTC
+Architectures: riscv64 all
+Components: main
+Description: WASMNux browser-bridged APT repository for Debian 13 (trixie) riscv64
+MD5Sum:
+ 419d1f29ac7f6e11b2e8fb1ac7fcb5ca 1987 main/binary-riscv64/Packages
+ 61d52939a915732ab3581b07f2b667f9 884 main/binary-riscv64/Packages.xz
+SHA256:
+ 320d47c22b6485812296e943d0e0129f9fbd2c887d992048643b02cd9940d7c3 1987 main/binary-riscv64/Packages
+ 87de90d7e66776cde93094aa52f17f6e89ac922509ad8199ce78fa195bbd3b6d 884 main/binary-riscv64/Packages.xz

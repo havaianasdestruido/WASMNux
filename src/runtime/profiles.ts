@@ -47,11 +47,12 @@ export const LINUX_PROFILES: Readonly<Record<LinuxProfileId, LinuxProfileDefinit
     kernelVersion: '7.3.1',
     userspaceSummary: 'Debian 13.7 "trixie" riscv64 (glibc 2.41, apt 3.0.3, dpkg 1.22.22)',
     kernelUrl: '/images/vmlinux-7.3.1-riscv64.Image.gz',
-    initrdUrl: '/images/debian-initramfs.cpio.gz',
+    initrdUrl: '',
     baseDiskUrl: '/images/debian-rootfs.ext4.gz',
     defaultRamMib: 256,
     diskMib: 256,
-    bootargs: 'console=ttyS0,115200 earlycon=sbi root=/dev/vda rw rootwait panic=-1',
+    bootargs:
+      'console=ttyS0,115200 earlycon=sbi root=/dev/vda rw rootwait init=/usr/sbin/init panic=-1',
   },
 };
 

@@ -184,37 +184,37 @@ Central implementation plan, acceptance criteria, and verification tracker for *
   - *Verification:* Automated persistence integration test + Playwright E2E test.
 
 ## Phase 6 — Debian Compatibility
-- [ ] Identify the latest stable Debian release (Debian `13.7` `"trixie"` official `riscv64` release).
+- [x] Identify the latest stable Debian release (Debian `13.7` `"trixie"` official `riscv64` release).
   - *Acceptance:* Verified against `debian.org` and `debuerreotype/docker-debian-artifacts` (`DEBIAN_VERSION_FULL=13.7`).
   - *Verification:* Recorded in `docs/ARCHITECTURE.md` and `docs/TEST_REPORT.md`.
-- [ ] Retrieve and verify the appropriate Debian root filesystem (`trixie/slim/oci/blobs/rootfs.tar.gz` from `debuerreotype/docker-debian-artifacts` `dist-riscv64` with SHA-256 verification).
-  - *Acceptance:* Official Debian 13.7 `riscv64` userland (`glibc 2.41`, `bash 5.2.37`, `apt 3.0.3`, `dpkg 1.22.22`, `coreutils 9.7`) extracted and formatted into real `ext4` root disk image `public/images/debian-trixie-riscv64.ext4.gz`.
-  - *Verification:* SHA-256 verification + `e2fsck -fn` check on generated `ext4` image.
-- [ ] Configure the compatible kernel (ensure Linux 7.3.1 config supports all Debian 13 `glibc 2.41` / `apt 3.0.3` / `dpkg 1.22.22` syscalls: `__riscv_hwprobe`, `futex`, `io_uring`, `seccomp`, `cgroups`, `namespaces`, `posix_timers`, `sysvipc`, `ext4` xattrs/ACLs, `inet`/`packet`/`unix` sockets).
+- [x] Retrieve and verify the appropriate Debian root filesystem (`trixie/slim/oci/blobs/rootfs.tar.gz` from `debuerreotype/docker-debian-artifacts` `dist-riscv64` with SHA-256 verification).
+  - *Acceptance:* Official Debian 13.7 `riscv64` userland (`glibc 2.41`, `bash 5.2.37`, `apt 3.0.3`, `dpkg 1.22.22`, `coreutils 9.7`) extracted and formatted into real `ext4` root disk image `public/images/debian-rootfs.ext4.gz`.
+  - *Verification:* SHA-256 verification + `e2fsck -fy` check on generated `ext4` image.
+- [x] Configure the compatible kernel (ensure Linux 7.3.1 config supports all Debian 13 `glibc 2.41` / `apt 3.0.3` / `dpkg 1.22.22` syscalls: `__riscv_hwprobe`, `futex`, `io_uring`, `seccomp`, `cgroups`, `namespaces`, `posix_timers`, `sysvipc`, `ext4` xattrs/ACLs, `inet`/`packet`/`unix` sockets).
   - *Acceptance:* Linux 7.3.1 boots Debian 13.7 `ext4` `/dev/vda` rw without missing-syscall errors.
   - *Verification:* Boot log and `apt`/`dpkg` execution test.
-- [ ] Implement Debian boot integration (fast deterministic Debian `/sbin/wasmnux-init` wrapper mounting `/proc`, `/sys`, `/dev`, `/dev/pts`, `/run`, `/tmp`, configuring hostname, loopback `lo` + `eth0` `10.0.2.15/24`, `/etc/resolv.conf`, `/dev/fb0` console notice, and starting login/shell session with clean `reboot`/`poweroff` scripts).
+- [x] Implement Debian boot integration (fast deterministic Debian `/etc/init.d/rcS` + `/usr/sbin/init` mounting `/proc`, `/sys`, `/dev`, `/dev/pts`, `/run`, `/tmp`, configuring hostname, loopback `lo` + `eth0` `10.0.2.15/24`, `/etc/resolv.conf`, `/dev/fb0` console notice, and starting login/shell session with clean `reboot`/`poweroff` `rcK` scripts).
   - *Acceptance:* Boots genuine Debian 13.7 `ext4` rootfs `/dev/vda` cleanly in WASM in seconds.
   - *Verification:* Automated Debian boot test checking `/etc/os-release` and `uname -a`.
-- [ ] Implement login and shell access (configured root/user environment with working `login` capability and automatic console login into real Debian `bash 5.2` interactive shell).
+- [x] Implement login and shell access (configured root/user environment with working `login` capability and automatic console login into real Debian `bash 5.2` interactive shell).
   - *Acceptance:* Interactive `bash` shell with proper `PATH`, `HOME`, `TERM=xterm-256color`, user switching (`su`/`login`), and job control.
   - *Verification:* Automated shell & user environment test inside booted Debian VM.
-- [ ] Validate BusyBox (include compiled `riscv64` `busybox` inside Debian `/usr/bin/busybox` + package and verify applet execution alongside GNU coreutils).
+- [x] Validate BusyBox (include compiled `riscv64` `busybox` inside Debian `/usr/bin/busybox` + package and verify applet execution alongside GNU coreutils).
   - *Acceptance:* `busybox --list` and `busybox uname -a` / applets work inside Debian 13.7.
   - *Verification:* Automated Debian BusyBox test.
-- [ ] Validate `apt` (configure real HTTP APT repository `http://apt.wasmnux.local/debian trixie main` served over `virtio-net` + Rust TCP/IP stack + browser Fetch bridge, containing genuine `riscv64` `.deb` packages with valid `Packages`, `Packages.gz`, and `Release` metadata).
-  - *Acceptance:* `apt-get update` and `apt-cache search` / `apt show` execute real `/usr/lib/apt/methods/http` over guest TCP/IP and update `/var/lib/apt/lists/`.
+- [x] Validate `apt` (configure real HTTP APT repository `http://apt.wasmnux.local/debian-repo trixie main` served over `virtio-net` + Rust TCP/IP stack + browser Fetch bridge, containing genuine `riscv64` `.deb` packages with valid `Packages`, `Packages.xz`, and `Release` metadata).
+  - *Acceptance:* `apt-get update` and `apt-cache search` / `apt-cache policy` execute real `/usr/lib/apt/methods/http` over guest TCP/IP and update `/var/lib/apt/lists/`.
   - *Verification:* Automated `apt-get update` + `apt-cache policy` test in booted Debian VM.
-- [ ] Validate `dpkg` (`dpkg -l`, `dpkg -L`, `dpkg -s`, `dpkg --audit` against real Debian 13.7 `/var/lib/dpkg/status`).
+- [x] Validate `dpkg` (`dpkg -l`, `dpkg -L`, `dpkg -s`, `dpkg --audit` against real Debian 13.7 `/var/lib/dpkg/status`).
   - *Acceptance:* `dpkg -l` lists official Debian 13.7 `riscv64` packages with zero broken states (`dpkg --audit` empty).
   - *Verification:* Automated `dpkg` query & consistency test.
-- [ ] Validate package installation and removal (`apt-get install -y <pkg>`, execute the newly installed `riscv64` ELF binary, then `apt-get remove -y <pkg>` and verify removal).
+- [x] Validate package installation and removal (`apt-get install -y <pkg>`, execute the newly installed `riscv64` ELF binary, then `apt-get remove -y <pkg>` and verify removal).
   - *Acceptance:* Real `.deb` package is downloaded over `virtio-net`, unpacked by `dpkg`, executed as a real `riscv64` ELF binary in guest userspace, and cleanly removed when requested.
   - *Verification:* Automated install -> run binary -> remove -> install test.
-- [ ] Validate package database persistence (persist dirty `ext4` chunks after `apt-get install`, shut down VM, restore from persisted storage, verify `/var/lib/dpkg/status` and installed binary remain intact and offline-usable).
+- [x] Validate package database persistence (persist dirty `ext4` chunks after `apt-get install`, shut down VM, restore from persisted storage, verify `/var/lib/dpkg/status` and installed binary remain intact and offline-usable).
   - *Acceptance:* Installed package works immediately after reboot even with network offline.
   - *Verification:* Offline reboot persistence test.
-- [ ] Validate Debian operation after browser restart (Playwright E2E test booting Debian, installing a package via `apt`, reloading/restarting Chromium, booting Debian again, and executing the installed package).
+- [x] Validate Debian operation after browser restart (Playwright E2E test booting Debian, installing a package via `apt`, reloading/restarting Chromium, booting Debian again, and executing the installed package).
   - *Acceptance:* Full browser reload/restart preserves installed Debian packages and `/etc` / `/root` edits.
   - *Verification:* Playwright E2E Debian persistence test.
 
@@ -283,25 +283,25 @@ Central implementation plan, acceptance criteria, and verification tracker for *
   - *Verification:* Service worker registration & asset separation test.
 
 ## Phase 9 — Networking
-- [ ] Evaluate browser networking restrictions (raw sockets/ICMP/ARP forbidden in browser sandbox; cross-origin HTTP constrained by CORS; outbound TCP requires HTTP Fetch bridge or WebSocket relay).
+- [x] Evaluate browser networking restrictions (raw sockets/ICMP/ARP forbidden in browser sandbox; cross-origin HTTP constrained by CORS; outbound TCP requires HTTP Fetch bridge or WebSocket relay).
   - *Acceptance:* Documented accurately in `docs/ARCHITECTURE.md` and `docs/SECURITY.md`.
   - *Verification:* Documentation audit.
-- [ ] Select a compatible networking architecture (`VirtioNet` `eth0` <-> Rust user-mode Ethernet/ARP/ICMP/DHCP/DNS/TCP stack `10.0.2.0/24` <-> TypeScript Browser HTTP Fetch & optional WebSocket relay bridge).
+- [x] Select a compatible networking architecture (`VirtioNet` `eth0` <-> Rust user-mode Ethernet/ARP/ICMP/DHCP/DNS/TCP stack `10.0.2.0/24` <-> TypeScript Browser HTTP Fetch & optional WebSocket relay bridge).
   - *Acceptance:* Allows unmodified guest Linux networking (`ip`, `ping 10.0.2.2`, DNS lookup, `wget`, Debian `apt` HTTP transport) inside standard browser security rules.
   - *Verification:* Architecture design & packet-flow unit tests.
-- [ ] Implement a network bridge where feasible (`crates/wasmnux-net` + `src/net/network-bridge.ts` mapping `http://apt.wasmnux.local/*` to same-origin `/debian-repo/*` and permitting CORS-safe HTTPS/HTTP fetches with strict private-IP/SSRF filtering).
+- [x] Implement a network bridge where feasible (`crates/wasmnux-net` + `src/net/network-bridge.ts` mapping `http://apt.wasmnux.local/*` to same-origin `/debian-repo/*` and permitting CORS-safe HTTPS/HTTP fetches with strict private-IP/SSRF filtering).
   - *Acceptance:* Real Ethernet frames traverse guest kernel -> VirtIO-Net -> Rust TCP stack -> TS Fetch bridge -> Rust TCP segments -> guest socket.
   - *Verification:* Rust TCP/ARP/DNS/DHCP unit tests + TS network bridge security tests.
-- [ ] Integrate guest network interfaces (configure `eth0` `10.0.2.15/24`, gateway `10.0.2.2`, DNS `10.0.2.2` in both Vanilla Linux and Debian 13.7).
+- [x] Integrate guest network interfaces (configure `eth0` `10.0.2.15/24`, gateway `10.0.2.2`, DNS `10.0.2.3` in both Vanilla Linux and Debian 13.7).
   - *Acceptance:* `ip addr show eth0` shows `UP` with `10.0.2.15/24` in both profiles.
   - *Verification:* Booted VM `ip addr` and `ip route` verification.
-- [ ] Validate DNS and connectivity (`ping -c 2 10.0.2.2`, DNS query for `apt.wasmnux.local`, and HTTP download via `wget`/TCP in guest).
+- [x] Validate DNS and connectivity (`ping -c 2 10.0.2.2`, DNS query for `apt.wasmnux.local`, and HTTP download via `wget`/TCP in guest).
   - *Acceptance:* Real ICMP replies and HTTP payload retrieval inside booted Linux guest.
   - *Verification:* Automated guest connectivity test.
-- [ ] Validate Debian repository access (`apt-get update` and `apt-get install` pulling real `riscv64` `.deb` packages over `eth0` `http://apt.wasmnux.local/debian`).
+- [x] Validate Debian repository access (`apt-get update` and `apt-get install` pulling real `riscv64` `.deb` packages over `eth0` `http://apt.wasmnux.local/debian-repo`).
   - *Acceptance:* Zero mocks — genuine Debian `apt` HTTP method over guest `eth0` VirtIO-Net.
   - *Verification:* Automated Debian `apt` over `virtio-net` integration & Playwright E2E test.
-- [ ] Document network limitations and deployment requirements (COOP/COEP headers if `SharedArrayBuffer` desired, CORS constraints on arbitrary external HTTP hosts, optional WebSocket L2/TCP relay protocol for unrestricted external TCP/TLS).
+- [x] Document network limitations and deployment requirements (COOP/COEP headers if `SharedArrayBuffer` desired, CORS constraints on arbitrary external HTTP hosts, optional WebSocket L2/TCP relay protocol for unrestricted external TCP/TLS).
   - *Acceptance:* Clear deployment guide in `docs/ARCHITECTURE.md` and `README.md`.
   - *Verification:* Documentation review.
 

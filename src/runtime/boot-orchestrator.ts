@@ -106,9 +106,12 @@ export class BootOrchestrator {
       const kernelGz = await this.fetchAsset(profile.kernelUrl);
       const kernel = await decompressGzipIfNeeded(kernelGz);
 
-      this.reportProgress(t0, 'loading_initrd', `Loading ${profile.name} initramfs...`);
-      const initrdGz = await this.fetchAsset(profile.initrdUrl);
-      const initrd = await decompressGzipIfNeeded(initrdGz);
+      let initrd = new Uint8Array(0);
+      if (profile.initrdUrl.length > 0) {
+        this.reportProgress(t0, 'loading_initrd', `Loading ${profile.name} initramfs...`);
+        const initrdGz = await this.fetchAsset(profile.initrdUrl);
+        initrd = await decompressGzipIfNeeded(initrdGz);
+      }
 
       this.reportProgress(t0, 'loading_base_disk', `Preparing ${profile.name} ext4 disk...`);
       const diskGz = await this.fetchAsset(profile.baseDiskUrl);
