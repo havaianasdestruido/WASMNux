@@ -188,7 +188,10 @@ jobs:
           {
             printf '<!-- wasmnux-diagnostics e2e-log run-%s sha-%s -->\n' "$GITHUB_RUN_ID" "$GITHUB_SHA"
             printf '**CI diagnostics:** e2e job failed in run %s.\n\n```\n' "$GITHUB_RUN_ID"
-            tail -n 250 e2e.log | head -c 40000
+            tail -n 150 e2e.log | head -c 20000
             printf '\n```\n'
+            for ctx in web/test-results/**/error-context.md; do
+              if [ -f "$ctx" ]; then printf '### %s\n```\n' "$ctx"; head -c 6000 "$ctx"; printf '\n```\n'; fi
+            done
           } > comment.md
           gh pr comment "$PR" --body-file comment.md

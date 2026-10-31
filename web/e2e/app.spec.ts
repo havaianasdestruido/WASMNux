@@ -7,11 +7,40 @@ interface Hooks {
   readDiskMarker(profile: string): Promise<string>;
 }
 
-function hooks(page: import("@playwright/test").Page): Promise<Hooks> {
+async function hooks(page: import("@playwright/test").Page): Promise<Hooks> {
+  await page.waitForFunction(
+    () => (window as unknown as Record<string, unknown>)["__wasmnux"] !== undefined,
+    undefined,
+    { timeout: 15_000 },
+  );
   return page.evaluate(() => {
     const w = window as unknown as Record<string, unknown>;
     return w["__wasmnux"] as Hooks;
   });
+}
+
+/** Waits until guest-asset probing settles for a profile. */
+async function assetKind(
+  page: import("@playwright/test").Page,
+  profile: string,
+): Promise<string> {
+  const h = await hooks(page);
+  let kind = h.profileAssetKind(profile);
+  await expect
+    .poll(
+      async () => {
+        const current = await page.evaluate(
+          (p) =>
+            ((window as unknown as Record<string, unknown>)["__wasmnux"] as Hooks).profileAssetKind(p),
+          profile,
+        );
+        kind = current;
+        return current;
+      },
+      { timeout: 15_000 },
+    )
+    .not.toBe("unknown");
+  return kind;
 }
 
 test.describe("WASMNux browser app", () => {
@@ -29,8 +58,7 @@ test.describe("WASMNux browser app", () => {
 
   test("refuses to fake a boot when guest assets are absent", async ({ page }) => {
     await page.goto("/");
-    const h = await hooks(page);
-    test.skip(h.profileAssetKind("vanilla") === "ready", "assets present; covered by the gated boot test");
+    test.skip((await assetKind(page, "vanilla")) === "ready", "assets present; covered by the gated boot test");
     await expect(page.locator("#btn-boot")).toBeDisabled();
     await expect(page.locator("#boot-reasons")).toContainText("guest/scripts");
     await expect(page.locator("#asset-detail")).toContainText("manifest.json");

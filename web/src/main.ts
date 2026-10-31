@@ -523,7 +523,14 @@ class App {
     const recreate = async (reason: string): Promise<void> => {
       this.#log(`WebGPU renderer issue: ${reason}. Falling back to Canvas 2D.`, "warn");
       this.#renderer?.dispose();
-      this.#renderer = await createFramebufferRenderer(canvas, () => undefined);
+      // A canvas that already vended a WebGPU context refuses a 2D one, so
+      // the fallback renderer gets a fresh canvas element in its place.
+      const fresh = document.createElement("canvas");
+      fresh.id = canvas.id;
+      fresh.width = canvas.width;
+      fresh.height = canvas.height;
+      canvas.replaceWith(fresh);
+      this.#renderer = await createFramebufferRenderer(fresh, () => undefined);
       this.#renderRendererBadge();
     };
     this.#renderer = await createFramebufferRenderer(canvas, (reason) => {
@@ -756,9 +763,11 @@ const MARKER_LENGTH = 4096;
 
 async function main(): Promise<void> {
   const app = new App();
-  await app.init();
+  // Install test hooks before init()'s async probing so automation never
+  // races the app's own startup; hook methods observe live app state.
   const w = window as unknown as Record<string, unknown>;
   w["__wasmnux"] = app.testHooks();
+  await app.init();
 }
 
 void main().catch((error: unknown) => {

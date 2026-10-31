@@ -39,7 +39,9 @@ jobs:
           key: musl-rv64imac-lp64-${{ hashFiles('guest/scripts/build-musl-toolchain.sh') }}
       - name: Build soft-float musl cross toolchain (distro glibc is lp64d-only)
         if: steps.musl-cache.outputs.cache-hit != 'true'
-        run: ./guest/scripts/build-musl-toolchain.sh "$GITHUB_WORKSPACE/guest/build/musl-cross"
+        run: |
+          set -o pipefail
+          ./guest/scripts/build-musl-toolchain.sh "$GITHUB_WORKSPACE/guest/build/musl-cross" 2>&1 | tee musl-toolchain.log
       - name: Use the musl toolchain for the BusyBox build
         run: echo "$GITHUB_WORKSPACE/guest/build/musl-cross/bin" >> "$GITHUB_PATH"
       - name: Resolve upstream versions (no hardcoding)
@@ -71,7 +73,9 @@ jobs:
           {
             printf '<!-- wasmnux-diagnostics guest-log run-%s sha-%s -->\n' "$GITHUB_RUN_ID" "$GITHUB_SHA"
             printf '**CI diagnostics:** guest busybox/initramfs job failed in run %s.\n\n```\n' "$GITHUB_RUN_ID"
-            tail -n 250 busybox-build.log | head -c 40000
+            for f in musl-toolchain.log busybox-build.log; do
+              if [ -f "$f" ]; then printf '### %s (tail)\n' "$f"; tail -n 150 "$f" | head -c 18000; printf '\n'; fi
+            done
             printf '\n```\n'
           } > comment.md
           gh pr comment "$PR" --body-file comment.md
