@@ -168,11 +168,15 @@ jobs:
           name: wasmnux-wasm-pkg
           path: web/public/wasm
       - name: Install Chromium
-        run: npx --prefix web playwright install --with-deps chromium
+        working-directory: web
+        run: npx playwright install --with-deps chromium
       - name: Run Playwright suite
+        working-directory: web
         run: |
           set -o pipefail
-          npm --prefix web exec -- playwright test 2>&1 | tee e2e.log
+          # Must run from web/ so playwright.config.ts (testDir=e2e/) applies;
+          # from the repo root Playwright defaults would swallow vitest files.
+          npx playwright test 2>&1 | tee ../e2e.log
       - name: DIAGNOSTICS — post failure log to the PR
         if: failure()
         env:
