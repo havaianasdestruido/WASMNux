@@ -18,6 +18,7 @@ on:
 
 permissions:
   contents: read
+  pull-requests: write
 
 jobs:
   busybox-initramfs:
@@ -33,7 +34,9 @@ jobs:
       - name: Resolve upstream versions (no hardcoding)
         run: ./guest/scripts/versions.sh all
       - name: Build BusyBox and enforce applet list
-        run: ./guest/scripts/build-busybox.sh "$GITHUB_WORKSPACE/guest/build/vanilla-rootfs"
+        run: |
+          set -o pipefail
+          ./guest/scripts/build-busybox.sh "$GITHUB_WORKSPACE/guest/build/vanilla-rootfs" 2>&1 | tee busybox-build.log
       - name: Behaviour-test the riscv64 BusyBox under qemu-user
         run: |
           QEMU=$(command -v qemu-riscv64-static)
@@ -46,6 +49,21 @@ jobs:
           sh guest/tests/busybox-applets.sh /tmp/bbwrap/busybox
       - name: Build initramfs
         run: ./guest/scripts/build-initramfs.sh "$GITHUB_WORKSPACE/guest/build/vanilla-rootfs" "$GITHUB_WORKSPACE/guest/build/initramfs.cpio.gz"
+      - name: DIAGNOSTICS — post failure log to the PR
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          PR=$(gh pr list --head "$GITHUB_REF_NAME" --state open --json number --jq '.[0].number // empty')
+          if [ -z "$PR" ]; then exit 0; fi
+          {
+            printf '<!-- wasmnux-diagnostics guest-log run-%s sha-%s -->\n' "$GITHUB_RUN_ID" "$GITHUB_SHA"
+            printf '**CI diagnostics:** guest busybox/initramfs job failed in run %s.\n\n```\n' "$GITHUB_RUN_ID"
+            tail -n 250 busybox-build.log | head -c 40000
+            printf '\n```\n'
+          } > comment.md
+          gh pr comment "$PR" --body-file comment.md
       - uses: actions/upload-artifact@v4
         with:
           name: vanilla-initramfs
