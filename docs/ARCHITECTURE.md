@@ -1,0 +1,152 @@
+# Architecture Decision Record — WASMNux (Browser-Native Linux)
+
+Status: **Accepted (foundation phase)** · Date: 2026-10-31
+Supersedes: none. This document is the feasibility record required by Mission §1.
+
+## 1. The non-negotiable fact: there is no WASM Linux kernel
+
+The upstream Linux kernel (C + architecture assembly) has **no WebAssembly
+architecture port** in the official tree (`arch/` contains no `wasm` port that
+boots upstream kernels as a browser guest). WASM is a sandboxed, structured
+control-flow bytecode with no supervisor mode, no page tables, no interrupts,
+and no MMIO — none of the primitives a kernel port requires. Therefore:
+
+> **Compiling the genuine upstream kernel "to WASM" is technically impossible
+> today, and this project will never claim otherwise.**
+
+The only technically valid route — also the route used by every real
+browser-Linux system (JSLinux/TinyEMU, v86, CheerpX, qemu-wasm) — is:
+
+```
+Browser tab
+└── TypeScript application (UI, lifecycle, storage orchestration)
+    └── Web Worker
+        └── Rust virtual-machine monitor, compiled to WebAssembly
+            ├── Guest CPU emulator (RISC-V 64)
+            ├── Guest RAM, MMU (Sv39), PLIC, CLINT, NS16550 UART
+            ├── VirtIO-MMIO block device  ──► OPFS/IndexedDB chunk store
+            └── simple-framebuffer region ──► WebGPU blit (Canvas2D fallback)
+                 │
+                 └── GUEST: genuine upstream Linux kernel binary
+                     + real BusyBox initramfs ("Vanilla Linux" profile)
+                     + real Debian riscv64 rootfs ("Debian" profile)
+```
+
+The kernel and userspace are unmodified guest binaries for the emulated
+architecture. Nothing is mocked, interpreted by TypeScript, or themed.
+
+## 2. Guest architecture selection: RISC-V 64 (`riscv64`)
+
+Evaluated candidates (verified 2026-10-31):
+
+| Option | Pros | Fatal / major cons | Verdict |
+|---|---|---|---|
+| **RISC-V 64, own Rust emulator** | Clean, documented, royalty-free ISA; privileged spec implementable and auditable in Rust; QEMU `virt`-style machine well documented; **Debian 13 is the first Debian stable with *official* riscv64**; upstream kernel first-class | Must implement CPU/MMU/devices ourselves; F/D extensions required for Debian's `lp64d` ABI (phased, see §5); interpreter performance (est. tens of MIPS) | **Selected** |
+| x86 via v86 (JS/WASM, BSD-2, actively maintained) | Mature, boots Linux today | 32-bit x86 only; **Debian 13 dropped the i386 kernel**, so "latest stable Debian" is impossible on v86; core is JS, not Rust; JIT-wasm design hard to audit/extend for our storage model | Rejected (fails Debian requirement) |
+| x86-64 via QEMU→WASM (`ktock/qemu-wasm`, TCG-to-WASM research) | Real QEMU devices | C codebase via Emscripten, experimental TCG backend, large footprint, not a Rust runtime; integration/audit cost extreme | Rejected for now; revisited if it matures |
+| RISC-V via RVVM (C, GPL-3.0, very active) | Fast, boots Linux/Debian, has some WASM support | C, GPL-3.0 copyleft conflicts with this repo's Apache-2.0; not a Rust core | Rejected (license + language mandate) |
+| RiSC-V via `takahirox/riscv-rust` (Rust, MIT) | Rust+WASM, boots Linux w/ OpenSBI, Sv39/48 | **Unmaintained since 2023-04**; old toolchain/deps; would require forking the whole CPU anyway to support current kernels and our async block layer | Rejected as dependency; used as a *design reference* (clean-room, spec-driven implementation) |
+| RISC-V via `d0iasm/rvemu` (Rust, MIT) | Rust+WASM, educational clarity | Linux support explicitly "ongoing"/incomplete; last pushed 2024-05 | Rejected as dependency; design reference |
+| CheerpX (commercial) | Boots Debian in browser | Proprietary, closed source — fails auditability | Rejected |
+| "Kernel compiled to WASM" / UML-to-WASM | — | Does not exist upstream; would not be the genuine kernel | Rejected as impossible (§1) |
+
+RISC-V machine model (deliberately QEMU-`virt`-compatible so upstream
+`riscv64 defconfig`-family kernels with a small config fragment work):
+
+| Region | Address | Notes |
+|---|---|---|
+| CLINT | `0x0200_0000` | msip / mtimecmp / mtime |
+| PLIC | `0x0C00_0000` | contexts: hart0 M + S |
+| UART0 (NS16550A) | `0x1000_0000` | IRQ 10, guest console = browser terminal |
+| VirtIO-MMIO ×8 | `0x1000_1000 + n·0x1000` | slot 0 = block device (IRQ 1) |
+| RAM | `0x8000_0000` … | configurable 128 MiB–2 GiB; optional `simple-framebuffer` carve-out at top of RAM |
+
+Boot protocol (RISC-V Linux standard): reset at RAM base in M-mode with
+`a0 = hartid`, `a1 = DTB address`. Two supported firmware paths:
+
+1. **OpenSBI `fw_jump`** (real firmware, built by `guest/scripts/build-opensbi.sh`)
+   loads the kernel `Image` at `RAM + 0x20_0000` — the production path.
+2. **Built-in minimal SBI shim** in the Rust core (BASE, TIME, LEGACY console,
+   SRST) that traps S-mode `ecall` and services it in the emulator — a
+   development convenience, clearly labelled, *not* a kernel modification.
+
+The DTB is generated by the Rust core (`dtb.rs`) from the machine
+configuration — the same role QEMU's generated DTB plays for `virt`.
+
+## 3. Versions (resolved dynamically, recorded here for the audit trail)
+
+Resolved on 2026-10-31 from official sources; build scripts re-resolve at
+build time instead of hardcoding (`guest/scripts/versions.sh`):
+
+- **Linux kernel**: latest *stable* = **7.3.1** (2026-10-30), mainline 7.3 —
+  `https://www.kernel.org/releases.json`.
+- **Debian**: latest stable = **13 "trixie"** (point release 13.7,
+  2026-09-12), first release with official `riscv64` — `debian.org/releases`.
+- **BusyBox**: latest stable from `busybox.net` at build time.
+
+## 4. Component architecture
+
+- `crates/wasmnux-core` — dependency-free Rust RISC-V machine (CPU RV64IMAC +
+  Zicsr/Zifencei, Sv39 MMU, PLIC, CLINT, UART, VirtIO-MMIO block, DTB builder,
+  ELF/Image loaders, lifecycle state machine). No browser knowledge; unit
+  tested natively.
+- `crates/wasmnux-wasm` — `wasm-bindgen` surface used by the Web Worker.
+- `web/` — strict TypeScript app: capability detection, profile manager,
+  OPFS/IndexedDB **chunked sparse disk** (64 KiB chunks, CRC-32 per chunk,
+  copy-on-write snapshot generations, import/export), xterm.js terminal wired
+  to the guest UART, **WebGPU framebuffer pipeline** (WGSL blit + storage
+  texture upload) with Canvas 2D fallback, PWA shell.
+- `guest/` — kernel config fragment, initramfs `/init`, build scripts for
+  kernel / BusyBox / OpenSBI / Debian riscv64 rootfs, in-guest test scripts.
+- CI (GitHub Actions) runs Rust fmt/clippy/test + `wasm32` build and web
+  typecheck/vitest/build/Playwright on every push; the heavyweight guest
+  builds are a manual `workflow_dispatch` pipeline publishing artifacts.
+
+Why sync in-WASM disk v1: OPFS sync access handles are Worker-only and the
+Rust core is synchronous; v1 loads the (sparse, CoW) disk image into WASM
+memory at boot and exports it back to the chunk store on sync points. The
+block-level async bridge is an explicit Phase-4 TODO, not silently assumed.
+
+## 5. Known limitations (honest, tracked in TODO.MD, never hidden)
+
+1. **No F/D floating-point extensions yet.** `misa` advertises RV64IMAC only.
+   Vanilla profile (soft-float BusyBox) is unaffected; **Debian riscv64 uses
+   the `lp64d` ABI and cannot execute userspace until F/D lands** — Debian
+   tasks therefore stay unchecked until then.
+2. **Sv39 only.** Sv48/Sv57 writes to `satp` are WARL-rejected; kernels probe
+   and fall back to Sv39 (verified behaviour of upstream RISC-V probing).
+3. **Single hart, interpreter only** (no JIT): correct-first performance.
+   Dynamic WASM code generation (v86-style) is a later optimisation phase.
+4. **Networking**: browsers expose no raw TCP/UDP to pages. The only honest
+   options are a WebSocket-relayed user-mode stack (virtio-net + relay
+   server, v86-style) or none. `apt` over the public internet requires
+   deploying a relay; documented, Phase 9, never faked.
+5. **WebGPU is a display path**, not guest GPU passthrough: it accelerates
+   framebuffer presentation (texture upload, scaling, pixel-format
+   conversion in WGSL). CPU emulation gains nothing from WebGPU, and the
+   project never claims otherwise.
+6. **Browser storage is evictable.** We request `navigator.storage.persist()`,
+   report the granted/estimated state in the UI, and provide disk
+   export/backup. Persistence ≠ permanence; the UI says so.
+7. Sandbox of the *development* environment has no Rust toolchain and no
+   kernel.org/Debian network access, so Rust verification runs on GitHub
+   Actions and guest-image builds run in the dispatch pipeline (see
+   `docs/TEST-REPORT.md` for exactly what was and was not executed).
+
+## 6. Security boundaries (summary; details in `docs/SECURITY.md`)
+
+The guest is fully untrusted code running inside a WASM sandbox inside the
+browser sandbox: no host filesystem, no host syscalls, only the virtual
+devices above. Imported disk images are size- and CRC-validated, snapshot
+metadata is schema-checked, worker messages are structurally validated, and
+no `eval`/dynamic code exists in the app.
+
+## 7. Alternatives considered for rendering/storage
+
+- VirtIO-GPU: heavyweight (virgl); `simple-framebuffer` + WebGPU blit reaches
+  a real guest console/graphics path with an upstream driver (`FB_SIMPLE`)
+  at a fraction of the surface. VirtIO-GPU remains a Phase-7 stretch task.
+- OPFS vs IndexedDB for disk bytes: OPFS (sync handles in the worker,
+  near-native throughput) for bytes, IndexedDB for small metadata —
+  implemented behind one `ChunkStore` interface with an in-memory backend for
+  tests and an IndexedDB fallback when OPFS is unavailable.

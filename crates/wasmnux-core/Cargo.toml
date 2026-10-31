@@ -1,0 +1,10 @@
+[package]
+name = "wasmnux-core"
+version = "0.1.0"
+description = "Dependency-free RISC-V 64 virtual machine core (CPU, MMU, PLIC, CLINT, UART, VirtIO block) for booting real Linux kernels"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[dependencies]
