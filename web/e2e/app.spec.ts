@@ -2,6 +2,8 @@ import { expect, test } from "@playwright/test";
 
 interface Hooks {
   storeKind: string;
+  wasmStatus(): string;
+  wasmReason(): string | undefined;
   profileAssetKind(profile: string): string;
   writeDiskMarker(profile: string, text: string): Promise<void>;
   readDiskMarker(profile: string): Promise<string>;
@@ -51,7 +53,15 @@ test.describe("WASMNux browser app", () => {
     await expect(page.locator("#capabilities")).toContainText("OPFS");
     // The Rust core must actually instantiate (the CI e2e job places the
     // wasm-bindgen artifact under public/wasm before running this suite).
-    await expect(page.locator("#wasm-state")).toContainText("ready", { timeout: 20_000 });
+    {
+      const h = await hooks(page);
+      await expect
+        .poll(async () => h.wasmStatus(), { timeout: 20_000 })
+        .not.toBe("loading");
+      if (h.wasmStatus() !== "ready") {
+        throw new Error(`WASM core unavailable in e2e: ${h.wasmReason() ?? "(no reason)"}`);
+      }
+    }
     const h = await hooks(page);
     expect(["opfs", "indexeddb"]).toContain(h.storeKind);
   });

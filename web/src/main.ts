@@ -720,6 +720,8 @@ class App {
     return {
       version: "0.1.0",
       storeKind: this.#store.kind,
+      wasmStatus: (): string => this.#vm.wasmStatus,
+      wasmReason: (): string | undefined => this.#vm.unavailableReason,
       profileAssetKind: (profile: string): string => {
         const id = parseProfileId(profile);
         if (id === undefined) return "unknown-profile";
@@ -753,6 +755,8 @@ class App {
 export interface WasmnuxTestHooks {
   readonly version: string;
   readonly storeKind: string;
+  wasmStatus(): string;
+  wasmReason(): string | undefined;
   profileAssetKind(profile: string): string;
   writeDiskMarker(profile: string, text: string): Promise<void>;
   readDiskMarker(profile: string): Promise<string>;

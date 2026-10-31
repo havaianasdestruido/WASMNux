@@ -176,7 +176,8 @@ jobs:
           set -o pipefail
           # Must run from web/ so playwright.config.ts (testDir=e2e/) applies;
           # from the repo root Playwright defaults would swallow vitest files.
-          npx playwright test 2>&1 | tee ../e2e.log
+          { echo "== web/public/wasm contents =="; ls -l public/wasm || true; echo "== playwright =="; } | tee ../e2e.log
+          npx playwright test 2>&1 | tee -a ../e2e.log
       - name: DIAGNOSTICS — post failure log to the PR
         if: failure()
         env:
