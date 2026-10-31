@@ -1,0 +1,21 @@
+# Rust / Cargo
+/target/
+**/*.rs.bk
+
+# Node / Vite / TypeScript
+/node_modules/
+/dist/
+/.vite/
+*.tsbuildinfo
+
+# Test & Playwright artifacts
+/coverage/
+/playwright-report/
+/test-results/
+/.playwright-cli/
+
+# Local caches & temporary build directories
+/.cache/
+/Unselected files/
+*.log
+.DS_Store

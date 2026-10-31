@@ -1,0 +1,38 @@
+{
+  "name": "wasmnux",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Browser-Native Linux (RV64GC WASM + WebGPU + Persistent OPFS/IDB Storage)",
+  "license": "Apache-2.0",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0 --port 5173",
+    "build:wasm": "./scripts/build-wasm.sh",
+    "build": "npm run build:wasm && tsc --noEmit && vite build",
+    "preview": "vite preview --host 0.0.0.0 --port 4173",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint \"src/**/*.ts\" \"tests/**/*.ts\"",
+    "format": "prettier --write \"src/**/*.{ts,css}\" \"tests/**/*.ts\" \"index.html\"",
+    "format:check": "prettier --check \"src/**/*.{ts,css}\" \"tests/**/*.ts\" \"index.html\"",
+    "test": "vitest run",
+    "test:e2e": "playwright test"
+  },
+  "dependencies": {
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/xterm": "^6.0.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.0",
+    "@playwright/test": "^1.64.1",
+    "@sparticuz/chromium": "^153.0.0",
+    "@types/node": "^22.15.0",
+    "@webgpu/types": "^0.1.74",
+    "eslint": "^9.39.0",
+    "fake-indexeddb": "^6.2.7",
+    "prettier": "^3.5.3",
+    "typescript": "~5.8.3",
+    "typescript-eslint": "^8.33.0",
+    "vite": "^6.4.5",
+    "vitest": "^3.2.4"
+  }
+}
