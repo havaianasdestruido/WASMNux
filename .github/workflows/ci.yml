@@ -79,7 +79,9 @@ jobs:
           cargo build -p wasmnux-wasm --target wasm32-unknown-unknown --release 2>&1 | tee wasm.log
       - name: Generate wasm-bindgen JS package
         run: |
-          cargo install wasm-bindgen-cli --version 0.2.100 --locked || cargo install wasm-bindgen-cli --locked
+          set -o pipefail
+          # Must exactly match the pinned wasm-bindgen crate version.
+          (cargo install wasm-bindgen-cli --version 0.2.130 --locked) 2>&1 | tee bindgen.log
           mkdir -p wasm-pkg
           wasm-bindgen --target web --out-dir wasm-pkg \
             target/wasm32-unknown-unknown/release/wasmnux_wasm.wasm
@@ -101,7 +103,7 @@ jobs:
           {
             printf '<!-- wasmnux-diagnostics rust-log run-%s sha-%s -->\n' "$GITHUB_RUN_ID" "$GITHUB_SHA"
             printf '**CI diagnostics:** Rust job failed in run %s. Tail of captured logs:\n\n' "$GITHUB_RUN_ID"
-            for f in clippy.log test.log wasm.log; do
+            for f in clippy.log test.log wasm.log bindgen.log; do
               if [ -f "$f" ]; then
                 printf '### %s (last 200 lines)\n```\n' "$f"
                 tail -n 200 "$f" | head -c 18000
