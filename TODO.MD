@@ -20,7 +20,7 @@ Do not delete incomplete items to improve apparent progress.
 - [x] **P1.2 Establish strict TypeScript tooling.** Acceptance: strict/no-unchecked-index/no-explicit-any configuration, reproducible npm lockfile, no runtime CDN dependency. Tests: typecheck, ESLint, formatting, unit tests.
 - [x] **P1.3 Configure browser WASM compilation.** Acceptance: wasm32-unknown-unknown module with a documented stable ABI and generated or checked TypeScript declarations. Tests: inspect WASM exports/imports; instantiate in Node and a browser worker.
 - [ ] **P1.4 Add capability detection.** Acceptance: WASM, module workers, OPFS synchronous handles, persistence API, WebGPU, cross-origin isolation reported independently. Tests: supported, absent, throwing, and denied capability fixtures; real Chromium probes.
-- [ ] **P1.5 Add CI quality gates.** Acceptance: Rust/TS/WASM/build-provenance checks run without claiming unavailable guest/browser tests passed. Tests: execute the same scripts locally and run the workflow on GitHub.
+- [x] **P1.5 Add CI quality gates.** Acceptance: Rust/TS/WASM/build-provenance checks run without claiming unavailable guest/browser tests passed. Tests: execute the same scripts locally and run the workflow on GitHub.
 - [ ] **P1.6 Pin development tools and audit dependencies.** Acceptance: versions, source URLs, hashes, licenses, and necessity recorded; tool installation avoids unverified binaries. Tests: lockfile/provenance checks and native/WASM dependency builds; security audit when tools are available.
 
 ## Phase 2 — Virtualization Core

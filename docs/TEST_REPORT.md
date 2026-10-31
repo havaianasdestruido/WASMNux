@@ -67,4 +67,4 @@ Debian E2E requires `launchPersistentContext`: ephemeral Chromium contexts repor
 4. `Machine::load_state` mutates CPU/bus before RAM validation; no rollback on corrupt snapshot.
 5. 11 moderate dev-only npm advisories remain.
 6. ext2 Debian disk retained after OPFS write fix; ext4 journal path not retested.
-7. CI workflow added but real guest/browser E2E is not yet run on GitHub Actions.
+7. GitHub Actions CI (rust + web jobs) passed on PR #5; real guest/browser E2E is still run locally, not on GitHub Actions.
