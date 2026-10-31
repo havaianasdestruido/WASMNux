@@ -16,6 +16,14 @@ WORK_DIR="${WORK_DIR:-$(dirname "${OUT_DIR}")/musl-cross-work}"
 # Pinned for reproducibility; bump deliberately.
 MUSL_CROSS_MAKE_COMMIT="5e8042e63de29f8473fc3b0b831a587ba284e1a8"
 
+# CI caches the installed toolchain (OUT_DIR). If a restore already
+# provided the compiler, do not spend 25 minutes rebuilding it.
+if [ -x "${OUT_DIR}/bin/riscv64-linux-musl-gcc" ]; then
+  echo "musl toolchain already present at ${OUT_DIR} (cache) — skipping build"
+  "${OUT_DIR}/bin/riscv64-linux-musl-gcc" --version | head -n 1
+  exit 0
+fi
+
 mkdir -p "${WORK_DIR}"
 if [ ! -d "${WORK_DIR}/musl-cross-make" ]; then
   git clone https://github.com/richfelker/musl-cross-make "${WORK_DIR}/musl-cross-make"
