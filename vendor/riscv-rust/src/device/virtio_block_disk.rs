@@ -37,6 +37,7 @@ pub struct VirtioBlockDisk {
     status: u32,               // read and write
     notify_clocks: Vec<u64>,
     contents: Vec<u64>,
+    image_bytes: u64,
 }
 
 impl VirtioBlockDisk {
@@ -59,6 +60,7 @@ impl VirtioBlockDisk {
             interrupt_status: 0,
             notify_clocks: Vec::new(),
             contents: vec![],
+            image_bytes: 0,
         }
     }
 
@@ -73,6 +75,8 @@ impl VirtioBlockDisk {
     /// # Arguments
     /// * `contents` filesystem content binary
     pub fn init(&mut self, contents: Vec<u8>) {
+        self.image_bytes = contents.len() as u64;
+        self.contents.clear();
         // @TODO: Optimize
         for _i in 0..((contents.len() + 7) / 8) {
             self.contents.push(0);
@@ -155,15 +159,11 @@ impl VirtioBlockDisk {
             0x10001071 => (self.status >> 8) as u8,
             0x10001072 => (self.status >> 16) as u8,
             0x10001073 => (self.status >> 24) as u8,
-            // Configurations @TODO: Implement properly
-            0x10001100 => 0x00,
-            0x10001101 => 0x20,
-            0x10001102 => 0x03,
-            0x10001103 => 0,
-            0x10001104 => 0,
-            0x10001105 => 0,
-            0x10001106 => 0,
-            0x10001107 => 0,
+            // Virtio block capacity is the number of 512-byte sectors.
+            // Never advertise bytes that are not backed by a whole sector.
+            0x10001100..=0x10001107 => {
+                ((self.image_bytes / SECTOR_SIZE) >> ((address - 0x10001100) * 8)) as u8
+            }
             _ => 0,
         }
     }
@@ -452,6 +452,19 @@ impl VirtioBlockDisk {
         ((self.get_base_avail_address() + 4 + queue_size * 2 + align - 1) / align) * align
     }
 
+    // Validate the entire transfer before touching either the guest buffer or
+    // disk. Reject arithmetic overflow and the unadvertised trailing bytes.
+    fn disk_range(&self, sector: u64, length: u64) -> Option<u64> {
+        let start = sector.checked_mul(SECTOR_SIZE)?;
+        let end = start.checked_add(length)?;
+        let capacity = (self.image_bytes / SECTOR_SIZE) * SECTOR_SIZE;
+        if end <= capacity {
+            Some(start)
+        } else {
+            None
+        }
+    }
+
     // @TODO: Follow the virtio block specification more propertly.
     fn handle_disk_access(&mut self, memory: &mut MemoryWrapper) {
         let base_desc_address = self.get_base_desc_address();
@@ -479,6 +492,7 @@ impl VirtioBlockDisk {
         let mut _blk_type = 0;
         let mut _blk_reserved = 0;
         let mut blk_sector = 0;
+        let mut request_status = 0;
         let mut desc_num = 0;
         let mut desc_next = desc_head_index;
         loop {
@@ -518,49 +532,40 @@ impl VirtioBlockDisk {
                     */
                 }
                 1 => {
-                    // Second descriptor: Read/Write disk
-                    match (desc_flags & VIRTQ_DESC_F_WRITE) == 0 {
-                        true => {
-                            // write to disk
-                            if (desc_addr % 8) == 0
-                                && ((blk_sector * SECTOR_SIZE) % 8) == 0
-                                && (desc_len % 8) == 0
-                            {
-                                // Enter fast path if possible
+                    // Validate the complete request before transferring any byte.
+                    if let Some(disk_address) = self.disk_range(blk_sector, desc_len as u64) {
+                        let aligned =
+                            (desc_addr % 8) == 0 && (disk_address % 8) == 0 && (desc_len % 8) == 0;
+                        if (desc_flags & VIRTQ_DESC_F_WRITE) == 0 {
+                            if aligned {
                                 self.transfer_to_disk(
                                     memory,
                                     desc_addr,
-                                    blk_sector * SECTOR_SIZE,
+                                    disk_address,
                                     desc_len as u64,
                                 );
                             } else {
                                 for i in 0..desc_len as u64 {
                                     let data = memory.read_byte(desc_addr + i);
-                                    self.write_to_disk(blk_sector * SECTOR_SIZE + i, data);
+                                    self.write_to_disk(disk_address + i, data);
                                 }
                             }
-                        }
-                        false => {
-                            // read from disk
-                            if (desc_addr % 8) == 0
-                                && ((blk_sector * SECTOR_SIZE) % 8) == 0
-                                && (desc_len % 8) == 0
-                            {
-                                // Enter fast path if possible
-                                self.transfer_from_disk(
-                                    memory,
-                                    desc_addr,
-                                    blk_sector * SECTOR_SIZE,
-                                    desc_len as u64,
-                                );
-                            } else {
-                                for i in 0..desc_len as u64 {
-                                    let data = self.read_from_disk(blk_sector * SECTOR_SIZE + i);
-                                    memory.write_byte(desc_addr + i, data);
-                                }
+                        } else if aligned {
+                            self.transfer_from_disk(
+                                memory,
+                                desc_addr,
+                                disk_address,
+                                desc_len as u64,
+                            );
+                        } else {
+                            for i in 0..desc_len as u64 {
+                                let data = self.read_from_disk(disk_address + i);
+                                memory.write_byte(desc_addr + i, data);
                             }
                         }
-                    };
+                    } else {
+                        request_status = 1; // VIRTIO_BLK_S_IOERR
+                    }
                 }
                 2 => {
                     // Third descriptor: Result status
@@ -570,7 +575,7 @@ impl VirtioBlockDisk {
                     if desc_len != 1 {
                         panic!("Third descriptor length should be one.");
                     }
-                    memory.write_byte(desc_addr, 0); // 0 means succeeded
+                    memory.write_byte(desc_addr, request_status);
                 }
                 _ => {}
             };
@@ -579,6 +584,9 @@ impl VirtioBlockDisk {
 
             if (desc_flags & VIRTQ_DESC_F_NEXT) == 0 {
                 break;
+            }
+            if desc_num >= 3 {
+                panic!("Descriptor chain exceeds supported length.");
             }
         }
 
@@ -595,5 +603,140 @@ impl VirtioBlockDisk {
 
         self.used_ring_index = self.used_ring_index.wrapping_add(1);
         memory.write_halfword(base_used_address.wrapping_add(2), self.used_ring_index);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use mmu::DRAM_BASE;
+
+    const HEADER: u64 = DRAM_BASE + 0x1800;
+    const DATA: u64 = DRAM_BASE + 0x2000;
+    const STATUS: u64 = DRAM_BASE + 0x2800;
+
+    fn capacity(disk: &mut VirtioBlockDisk) -> u64 {
+        let mut bytes = [0u8; 8];
+        for (i, byte) in bytes.iter_mut().enumerate() {
+            *byte = disk.load(0x10001100 + i as u64);
+        }
+        u64::from_le_bytes(bytes)
+    }
+
+    fn descriptor(
+        memory: &mut MemoryWrapper,
+        index: u64,
+        addr: u64,
+        len: u32,
+        flags: u16,
+        next: u16,
+    ) {
+        let base = DRAM_BASE + index * 16;
+        memory.write_doubleword(base, addr);
+        memory.write_word(base + 8, len);
+        memory.write_halfword(base + 12, flags);
+        memory.write_halfword(base + 14, next);
+    }
+
+    // Construct the same three-descriptor virtqueue layout used by this
+    // historical device, backed by real emulated memory.
+    fn request(
+        sector: u64,
+        len: u32,
+        read: bool,
+        unaligned: bool,
+    ) -> (VirtioBlockDisk, MemoryWrapper) {
+        let mut disk = VirtioBlockDisk::new();
+        disk.init(vec![0x5a; 1024]);
+        disk.guest_page_size = 4096;
+        disk.queue_pfn = (DRAM_BASE / 4096) as u32;
+        disk.queue_size = 8;
+        let mut memory = MemoryWrapper::test_memory(0x3000);
+        descriptor(&mut memory, 0, HEADER, 16, VIRTQ_DESC_F_NEXT, 1);
+        let data_flags = VIRTQ_DESC_F_NEXT | if read { VIRTQ_DESC_F_WRITE } else { 0 };
+        descriptor(
+            &mut memory,
+            1,
+            DATA + u64::from(unaligned),
+            len,
+            data_flags,
+            2,
+        );
+        descriptor(&mut memory, 2, STATUS, 1, VIRTQ_DESC_F_WRITE, 0);
+        memory.write_doubleword(HEADER + 8, sector);
+        memory.write_byte(STATUS, 0xff);
+        // Available ring 0 selects the descriptor chain beginning at index 0.
+        memory.write_halfword(DRAM_BASE + 8 * 16 + 4, 0);
+        (disk, memory)
+    }
+
+    #[test]
+    fn capacity_register_reports_whole_backed_sectors_little_endian() {
+        let mut disk = VirtioBlockDisk::new();
+        assert_eq!(capacity(&mut disk), 0);
+        disk.init(vec![0; 0x102 * 512 + 7]);
+        assert_eq!(capacity(&mut disk), 0x102);
+        disk.init(vec![0; 512]);
+        assert_eq!(capacity(&mut disk), 1);
+    }
+
+    #[test]
+    fn last_sector_reads_succeed_on_fast_and_unaligned_paths() {
+        for unaligned in [false, true] {
+            let len = if unaligned { 3 } else { 512 };
+            let (mut disk, mut memory) = request(1, len, true, unaligned);
+            disk.handle_disk_access(&mut memory);
+            assert_eq!(memory.read_byte(STATUS), 0);
+            assert_eq!(memory.read_byte(DATA + u64::from(unaligned)), 0x5a);
+            assert_eq!(disk.used_ring_index, 1);
+        }
+    }
+
+    #[test]
+    fn last_sector_writes_succeed_on_fast_and_unaligned_paths() {
+        for unaligned in [false, true] {
+            let len = if unaligned { 3 } else { 512 };
+            let (mut disk, mut memory) = request(1, len, false, unaligned);
+            memory.write_byte(DATA + u64::from(unaligned), 0x39);
+            disk.handle_disk_access(&mut memory);
+            assert_eq!(memory.read_byte(STATUS), 0);
+            assert_eq!(disk.read_from_disk(512), 0x39);
+            assert_eq!(disk.used_ring_index, 1);
+        }
+    }
+
+    #[test]
+    fn out_of_range_or_overflowing_requests_return_ioerr_without_transferring() {
+        for (sector, len, read, unaligned) in [
+            (2, 512, true, false),
+            (1, 1024, false, false),
+            (1, 513, false, true),
+            (u64::MAX, 512, true, false),
+            (u64::MAX / SECTOR_SIZE, u32::MAX, true, false),
+        ] {
+            let (mut disk, mut memory) = request(sector, len, read, unaligned);
+            let before = disk.contents.clone();
+            memory.write_byte(DATA + u64::from(unaligned), 0x39);
+            disk.handle_disk_access(&mut memory);
+            assert_eq!(memory.read_byte(STATUS), 1);
+            assert_eq!(memory.read_byte(DATA + u64::from(unaligned)), 0x39);
+            assert_eq!(disk.contents, before);
+            assert_eq!(disk.used_ring_index, 1);
+        }
+    }
+
+    #[test]
+    #[should_panic(expected = "Descriptor chain exceeds supported length")]
+    fn cyclic_descriptor_chain_cannot_hang_the_device() {
+        let (mut disk, mut memory) = request(0, 512, true, false);
+        descriptor(
+            &mut memory,
+            2,
+            STATUS,
+            1,
+            VIRTQ_DESC_F_WRITE | VIRTQ_DESC_F_NEXT,
+            0,
+        );
+        disk.handle_disk_access(&mut memory);
     }
 }

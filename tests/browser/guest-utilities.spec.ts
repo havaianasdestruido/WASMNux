@@ -41,6 +41,9 @@ gzip -dc input.gz | grep -q beta
 ash -c 'test -f /tmp/wasmnux-check/input'
 mount -t proc proc /proc 2>/dev/null || true
 test -r /proc/meminfo
+# The diagnostic image is 50 MiB. The block device must not advertise 100 MiB.
+awk '$4 == "vda" && $3 == 51200 { found=1 } END { exit !found }' /proc/partitions
+printf 'DISK_%s\n' CAPACITY_OK
 ps > /tmp/wasmnux-ps
 free > /tmp/wasmnux-free
 dmesg > /dev/null
@@ -87,5 +90,6 @@ sh /tmp/wasmnux-test.sh && printf 'CHECK_%s\n' PASS || printf 'CHECK_%s\n' FAIL
   const guestStatus = (await status.textContent()) ?? "";
   expect(guestStatus, `Guest failed during utility verification: ${guestStatus}`).toBe("running");
   await expect(output).toContainText("CHECK_PASS");
+  await expect(output).toContainText("DISK_CAPACITY_OK");
   await expect(output).not.toContainText("CHECK_FAIL");
 });

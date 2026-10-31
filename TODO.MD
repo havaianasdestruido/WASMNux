@@ -25,7 +25,8 @@ This is the source of truth. A checkbox is checked only after its acceptance cri
 ## Phase 2 — Virtualization Core
 - [x] Boot the pinned historical diagnostic only; accept: real browser reaches Linux 5.4 userspace and executes a serial command; test: DIAG-BOOT.
 - [x] Surface diagnostic emulator traps even if WASM cleanup throws; accept: real browser reports the trap and permits a fresh start; test: DIAG-TRAP.
-- [x] Rebuild and repair the historical diagnostic conversion instructions; accept: tested rounding/flags and the unchanged real guest utility script passes; tests: DIAG-ISA and DIAG-UTILITIES.
+- [x] Rebuild and repair the historical diagnostic conversion instructions; accept: tested rounding/flags and all original real guest utility assertions pass; tests: DIAG-ISA and DIAG-UTILITIES.
+- [x] Correct the historical diagnostic block capacity and reject out-of-range transfers; accept: guest sees its real image size and invalid transfers return errors without partial disk writes; test: DIAG-DISK.
 - [ ] Integrate the selected VM engine with pinned provenance; accept: Rust/WASM executes actual RISC-V instructions; tests: VM-INST and VM-BROWSER.
 - [ ] Validate guest CPU, memory, privilege/MMU, interrupts, clocks and timers; accept: real kernel reaches userspace; tests: KERNEL-BOOT and ISA.
 - [ ] Validate firmware/direct boot and kernel boot protocol; accept: documented command line and inspected logs; test: KERNEL-BOOT.

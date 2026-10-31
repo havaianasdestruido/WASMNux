@@ -939,6 +939,13 @@ pub struct MemoryWrapper {
 }
 
 impl MemoryWrapper {
+    #[cfg(test)]
+    pub(crate) fn test_memory(capacity: u64) -> Self {
+        let mut memory = Self::new();
+        memory.init(capacity);
+        memory
+    }
+
     fn new() -> Self {
         MemoryWrapper {
             memory: Memory::new(),

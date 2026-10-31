@@ -74,3 +74,57 @@ test("instantiates the locally built Rust Wasm and enforces ABI and memory limit
     missingOutput: -2,
   });
 });
+
+test("the real Wasm rejects partial-sector disk images and permits a replacement", async ({
+  page,
+}) => {
+  await page.goto("/");
+  const result = await page.evaluate(async () => {
+    const [moduleResponse, programResponse] = await Promise.all([
+      fetch("/guest/wasmnux_diagnostic.wasm"),
+      fetch("/guest/fw_payload.elf"),
+    ]);
+    if (!moduleResponse.ok || !programResponse.ok) throw new Error("Diagnostic assets unavailable");
+    const program = new Uint8Array(await programResponse.arrayBuffer());
+    const { instance } = await WebAssembly.instantiate(await moduleResponse.arrayBuffer());
+    const wasm = instance.exports as unknown as {
+      memory: WebAssembly.Memory;
+      vm_new: () => number;
+      vm_alloc_image: (size: number) => number;
+      vm_load_program: () => number;
+      vm_load_disk: () => number;
+      vm_run_cycles: (count: number) => number;
+      vm_free: () => number;
+    };
+    const created = wasm.vm_new();
+    const offset = wasm.vm_alloc_image(program.length);
+    if (!offset || offset + program.length > wasm.memory.buffer.byteLength) {
+      throw new Error("Invalid program buffer");
+    }
+    new Uint8Array(wasm.memory.buffer, offset, program.length).set(program);
+    const programLoaded = wasm.vm_load_program();
+    const partialReserved = wasm.vm_alloc_image(513) > 0;
+    const partialRejected = wasm.vm_load_disk();
+    const prematureCycles = wasm.vm_run_cycles(1);
+    const replacementReserved = wasm.vm_alloc_image(512) > 0;
+    const freed = wasm.vm_free();
+    return {
+      created,
+      programLoaded,
+      partialReserved,
+      partialRejected,
+      prematureCycles,
+      replacementReserved,
+      freed,
+    };
+  });
+  expect(result).toEqual({
+    created: 0,
+    programLoaded: 0,
+    partialReserved: true,
+    partialRejected: 2,
+    prematureCycles: 1,
+    replacementReserved: true,
+    freed: 0,
+  });
+});

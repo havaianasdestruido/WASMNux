@@ -167,6 +167,9 @@ pub extern "C" fn vm_load_disk() -> i32 {
         }
         match session.input_buffer.take() {
             Some(bytes) => {
+                if bytes.len() % 512 != 0 {
+                    return BAD_ARGUMENT;
+                }
                 session.emulator.setup_filesystem(bytes);
                 // Upstream describes this cache as experimental and unsound
                 // when guest page tables change.
@@ -273,6 +276,19 @@ mod tests {
         assert_eq!(vm_put_input(0), BAD_STATE);
         assert_eq!(vm_free(), OK);
         assert_eq!(vm_get_output(), -2);
+        assert_eq!(vm_free(), OK);
+    }
+
+    #[test]
+    fn abi_rejects_a_partial_disk_sector() {
+        assert_eq!(vm_free(), OK);
+        assert_eq!(vm_new(), OK);
+        SESSION.with(|slot| slot.borrow_mut().as_mut().unwrap().stage = Stage::ProgramLoaded);
+        assert_ne!(vm_alloc_image(513), 0);
+        assert_eq!(vm_load_disk(), BAD_ARGUMENT);
+        assert_eq!(vm_run_cycles(1), BAD_STATE);
+        // The rejected buffer is released and a replacement can be reserved.
+        assert_ne!(vm_alloc_image(512), 0);
         assert_eq!(vm_free(), OK);
     }
 
