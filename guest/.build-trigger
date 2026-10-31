@@ -1,3 +1,2 @@
-3
-# Bump the number above to re-run the fast guest pipeline
-# (BusyBox riscv64 + initramfs) in CI. See .github/workflows/guest.yml.
+4
+# Bump to re-run fast guest pipeline

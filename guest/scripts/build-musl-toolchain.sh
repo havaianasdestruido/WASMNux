@@ -14,7 +14,7 @@ set -euo pipefail
 OUT_DIR="${1:?usage: build-musl-toolchain.sh <out-dir>}"
 WORK_DIR="${WORK_DIR:-$(dirname "${OUT_DIR}")/musl-cross-work}"
 # Pinned for reproducibility; bump deliberately.
-MUSL_CROSS_MAKE_COMMIT="fe9158265703bb7d11797cf3ff70fc250bbacdde"
+MUSL_CROSS_MAKE_COMMIT="5e8042e63de29f8473fc3b0b831a587ba284e1a8"
 
 mkdir -p "${WORK_DIR}"
 if [ ! -d "${WORK_DIR}/musl-cross-make" ]; then
