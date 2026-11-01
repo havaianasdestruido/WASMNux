@@ -128,3 +128,74 @@ This report tracks verification evidence for every completed phase and requireme
 
 
 
+
+---
+
+## Consolidation pass — independent verification (2026-10-31)
+
+This section records work performed while consolidating the open pull requests into
+`main`. It **supersedes** earlier rows where numbers disagree (for example `P1-02` still
+records a 428-byte placeholder `.wasm`; the real artifact is ~311 KB).
+
+### C.1 Continuous integration (authoritative gates)
+
+| Item | Value |
+| --- | --- |
+| Branch | `arena/94e8543e-wasmnux` (PR #4 head `c2e7f66` + consolidation commits) |
+| Green run | `41258212908` |
+| Gates executed | `cargo fmt --check`; `cargo check --workspace --all-targets`; `cargo clippy` (host **and** `wasm32-unknown-unknown`, `-D warnings`); `cargo test --workspace`; `scripts/build-wasm.sh`; Prettier; ESLint; `tsc --noEmit`; `npm test`; `vite build`; `playwright test` |
+
+Defects found and fixed while establishing that green state (all were real):
+
+| Defect | Evidence | Fix |
+| --- | --- | --- |
+| Clippy 1.99 rejected the workspace (`manual_is_multiple_of`, `unnecessary_cast`, `manual_checked_ops`) | Clippy gate failure on PR #4 head | Clippy-clean code preserving RISC-V divide semantics |
+| `scripts/build-wasm.sh` failed with `E0463: can't find crate for std` | the `--print target-libdir` probe always succeeds, so the `wasm32` target was never installed | probe compiles a `std` program; rustup adds the target; bootstrap fails early |
+| Run logs unreachable from restricted networks | object storage blocked | every gate output is teed and the decisive excerpts are published as annotations + a `ci-diagnostics` branch |
+
+### C.2 Headless functional verification (no browser, no Rust toolchain)
+
+The committed `public/wasm/wasmnux_wasm.wasm` was instantiated directly in Node and
+driven through its ABI. This is the same artifact the application loads, so it verifies
+the guest independently of Playwright.
+
+| Check | Result |
+| --- | --- |
+| Vanilla Linux boot | reaches `root@wasmnux-vanilla:~#` in ~2 s / **63,296,558** instructions (≈31.6 MIPS) |
+| Kernel init | `VFS`, `ext4` mount of `/dev/vda`, `virtio_blk`, `riscv-plic`, `goldfish_rtc`, `simple-framebuffer` all initialise |
+| BusyBox in guest | `uname -a`, `busybox` applet list, `ps` (init + `/bin/ash`), `free` (122 MB), `df`, `cat`, `mkdir`, `echo`, `sync`, `poweroff` |
+| Clean shutdown | `poweroff` → `StepOutcome::PowerOff` via syscon |
+| ext4 persistence | `PERSIST_MARKER_42` written to `/persist/keep.txt`, poweroff, reboot with the 5 dirty overlay chunks → identical content, plus `/persist/d/a.txt` |
+| Debian boot | reaches `root@wasmnux-debian:/#` in ~3 s / **77,750,000** instructions |
+| Debian identity | `Debian GNU/Linux 13 (trixie)`, `/etc/debian_version` = `13.7`, `dpkg` `1.22.22` (riscv64), `apt` `3.0.3` (riscv64), 82 packages installed |
+| Networking | `eth0` `UP`, `10.0.2.15/24`, MAC `52:54:00:12:34:56` |
+| `apt-get update` | real TCP/HTTP through VirtIO-Net → bridge → `Release` (613 B) and `Packages.xz` (884 B) fetched |
+| `apt-get install` | `wasmnux-hello 1.0.0` `.deb` (19,454 B) downloaded, unpacked and configured; `dpkg -l` shows `ii` |
+| Native ELF execution | `wasmnux-hello ARG1` → `WASMNUX_HELLO_OK kernel=Linux-7.3.1 arch=riscv64 arg[1]=ARG1` |
+| Package persistence | poweroff (59 dirty chunks) → reboot → `dpkg -l` still `ii`, `/root/deb-marker` intact, binary still runs |
+| Removal | `apt-get remove -y wasmnux-hello` → `dpkg-query: no packages found matching wasmnux-hello` |
+
+### C.3 Tests added in the consolidation pass
+
+| Test | Covers |
+| --- | --- |
+| `wasmnux-riscv::tests::fcvt_l_d_and_fcvt_d_lu_saturate` | `FCVT.L.D`/`FCVT.LU.D`/`FCVT.D.LU` saturation: 2^64, NaN, ±Inf, round-toward-zero, negative→unsigned |
+| `wasmnux-riscv::tests::unaligned_guest_access_is_byte_accurate_and_bounds_checked` | unaligned 8/4-byte little-endian access; faults when leaving RAM |
+| `wasmnux-riscv::tests::malformed_kernel_images_are_rejected` | short/bad-magic `Image` headers; empty and oversized payloads; raw bare-metal payload still accepted |
+| `wasmnux-riscv::tests::rv64m_div_rem_zero_and_overflow_semantics_match_riscv_spec` | DIV/DIVU/REM/REMU + W-width zero and overflow results |
+| `tests/unit/opfs-write-integrity.test.ts` | OPFS writes bounded to 64 KiB; short write reported as `io_interrupted` |
+| `tests/unit/assets-manifest.test.ts` | SHA-256 of every shipped guest asset matches `public/assets-manifest.json` |
+
+### C.4 Limitations confirmed during verification
+
+1. **Official Debian archive is not used.** The guest's `debian.sources` is renamed to
+   `debian-upstream.sources.disabled`; apt points only at the bundled four-package repo
+   `http://apt.wasmnux.local/debian-repo`. Package management is genuinely apt+dpkg, but
+   it is *not* evidence of access to `deb.debian.org`.
+2. **WebGPU in CI uses a software adapter** (SwiftShader). Hardware-adapter and
+   Firefox/WebKit runs are absent.
+3. **Snapshot restore/delete are not driven through the UI**, and there is no
+   `context.setOffline(true)` cold-start test.
+4. Guest payloads are prebuilt; the from-source pipeline was not re-executed here.
+5. One unrelated CI run showed a transient Vitest failure that did not reproduce on
+   re-run with identical sources; the benchmark thresholds remain timing-sensitive.

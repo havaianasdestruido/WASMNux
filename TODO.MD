@@ -1,366 +1,233 @@
-# TODO — Browser-Native Linux
+# TODO — Browser-Native Linux (WASMNux)
 
-Central implementation plan, acceptance criteria, and verification tracker for **WASMNux** (Browser-Native Linux on Rust + WebAssembly + WebGPU + Persistent Browser Storage).
+Central implementation plan, acceptance criteria and verification tracker for **WASMNux**
+(browser-native RISC-V Linux on Rust + WebAssembly + WebGPU + persistent browser storage).
 
-> **Policy:** An item may only be marked `[x]` after both its implementation and its associated automated/integration verification tests have executed and passed, with evidence recorded in `docs/TEST_REPORT.md`.
+> **Status policy**
+> * `[x]` — implementation **and** its required automated test have executed and passed.
+>   The evidence ID (e.g. `E-BOOT-01`) refers to `docs/TEST_REPORT.md`.
+> * `[ ]` — not implemented, not verified, or verified only in an environment that is not
+>   the target environment. The trailing note says what is missing and what would close it.
+>
+> Nothing in this file may be marked `[x]` on the strength of a PR description, a green
+> badge, or a benchmark claim. Every `[x]` below is backed either by a named CI gate in
+> `.github/workflows/ci.yml` (which runs `cargo fmt`, `cargo check --all-targets`,
+> `cargo clippy` for host **and** `wasm32`, `cargo test --workspace`, `build-wasm.sh`,
+> TypeScript format/lint/typecheck, Vitest, production build and Playwright E2E), or by an
+> entry in `docs/TEST_REPORT.md`.
 
 ---
 
-## Phase 0 — Repository Audit and Feasibility
-- [x] Inspect the existing repository (`LICENSE`, git history, branch state, directory structure).
-  - *Acceptance:* Complete inventory of initial repository state documented in `docs/ARCHITECTURE.md`.
-  - *Verification:* `git status`, `git log`, workspace file audit recorded in `docs/TEST_REPORT.md`.
-- [x] Identify existing infrastructure and reusable components (host compilers, `mke2fs`/`e2fsck`, Node.js, Python, reachable registries).
-  - *Acceptance:* Exact host/toolchain inventory and reproducible bootstrap plan documented.
-  - *Verification:* Toolchain availability probe script execution.
-- [x] Investigate Linux kernel execution inside WASM (direct WASM kernel compilation vs. hardware system emulation in WASM).
-  - *Acceptance:* Technical analysis of why unmodified upstream Linux + Debian ELF userspace requires hardware ISA emulation in WASM rather than compiling the C kernel directly to `wasm32`.
-  - *Verification:* Documented architectural proof in `docs/ARCHITECTURE.md`.
-- [x] Evaluate existing Rust emulators and virtualization engines (`wkoszek/emuko`, `takahirox/riscv-rust`, `d0iasm/rvemu`, `leesum1/RV64emu-rs`, `copy/v86`).
-  - *Acceptance:* Comparative audit covering ISA completeness, MMU accuracy, licensing, dependencies, WASM 32-bit safety, and Debian 13 compatibility.
-  - *Verification:* Source-level audit documented in `docs/ARCHITECTURE.md`.
-- [x] Select the guest CPU architecture (`riscv64` / `RV64IMAFDC` `lp64d` with `Sv39` MMU).
-  - *Acceptance:* Selected architecture supports both latest upstream Linux (`7.3.1`) and latest official stable Debian (`13.7 "trixie"`).
-  - *Verification:* Architecture rationale and ABI compatibility verification.
-- [x] Verify Linux kernel compatibility (upstream `v7.3.1` `ARCH=riscv` kernel build and boot protocol requirements).
-  - *Acceptance:* Exact kernel version (`7.3.1`), boot protocol (RISC-V Linux `Image` + FDT + SBI in S-mode), and required `CONFIG_*` drivers identified.
-  - *Verification:* Upstream git tag verification (`refs/tags/v7.3.1`) and build config validation.
-- [x] Verify Debian compatibility (official Debian `13.7` `"trixie"` `riscv64` rootfs and package management).
-  - *Acceptance:* Official `debuerreotype/docker-debian-artifacts` `dist-riscv64` `trixie` (`13.7`) provenance, `apt 3.0.3`, `dpkg 1.22.22`, and `glibc 2.41` requirements verified.
-  - *Verification:* Manifest and `os-release` verification from official Debian artifacts repo.
-- [x] Document architectural decisions (`docs/ARCHITECTURE.md` and `THIRD_PARTY_NOTICES.md`).
-  - *Acceptance:* Comprehensive ADR covering CPU/MMU, VirtIO devices, sparse persistent block storage, WebGPU pipeline, user-mode TCP/IP bridge, and security boundaries.
-  - *Verification:* Document completeness review.
-- [x] Document technical limitations (browser sandbox networking constraints, single-hart interpreter throughput vs. native KVM, WebGPU framebuffer presentation vs. guest 3D passthrough, OPFS/IndexedDB eviction semantics).
-  - *Acceptance:* Honest, exact technical limitations documented in `docs/ARCHITECTURE.md` and `docs/SECURITY.md`.
-  - *Verification:* Cross-check against system requirements.
-- [x] Define acceptance criteria (mapping every Definition of Done item to concrete automated test suites).
-  - *Acceptance:* Test matrix and acceptance thresholds defined in `docs/ARCHITECTURE.md` and `docs/TEST_REPORT.md`.
-  - *Verification:* Traceability matrix check.
+## Supporting evidence
 
-## Phase 1 — Project Foundation
-- [x] Establish the Rust workspace (`Cargo.toml` with modular crates: `wasmnux-riscv`, `wasmnux-storage`, `wasmnux-virtio`, `wasmnux-net`, `wasmnux-wasm`).
-  - *Acceptance:* Clean workspace builds natively (`x86_64-unknown-linux-gnu`) and for WASM (`wasm32-unknown-unknown`).
-  - *Verification:* `cargo check --workspace` and `cargo test --workspace`.
-- [x] Establish the TypeScript application (`package.json`, Vite build, strict `tsconfig.json` with `strict: true`, `noImplicitAny: true`, `noUncheckedIndexedAccess: true`).
-  - *Acceptance:* Modular TypeScript browser runtime compiles cleanly with zero `any` or unsafe casts.
-  - *Verification:* `npm run typecheck` and `npm run build`.
-- [x] Configure the WASM compilation target (`wasm32-unknown-unknown` release profile with LTO and reproducible build script `scripts/build-wasm.sh`).
-  - *Acceptance:* Produces valid `.wasm` module loadable in Node/Vitest and Chromium Web Workers.
-  - *Verification:* `scripts/build-wasm.sh` + WASM instantiation test.
-- [x] Establish strict linting and formatting (`rustfmt.toml`, Clippy `-D warnings`, ESLint flat config, Prettier).
-  - *Acceptance:* Zero warnings or formatting diffs across Rust and TypeScript.
-  - *Verification:* `cargo fmt --all -- --check`, `cargo clippy --all-targets --all-features -- -D warnings`, `npm run lint`, `npm run format:check`.
-- [x] Configure automated testing (Rust `cargo test`, Vitest unit/integration tests, Playwright + headless Chromium E2E suite).
-  - *Acceptance:* All test runners execute reproducibly via single commands.
-  - *Verification:* `cargo test`, `npm test`, `npm run test:e2e`.
-- [x] Establish CI (`.github/workflows/ci.yml` covering Rust fmt/clippy/test/wasm, TypeScript lint/format/typecheck/vitest, and E2E verification).
-  - *Acceptance:* Valid GitHub Actions workflow mirroring local verification gates.
-  - *Verification:* Workflow schema/command verification.
-- [x] Implement browser capability detection (`src/runtime/capabilities.ts` probing WebAssembly, Web Workers, `SharedArrayBuffer`/COOP-COEP, WebGPU adapter/device, OPFS, IndexedDB, `navigator.storage.persist` & `estimate`, Clipboard API).
-  - *Acceptance:* Accurate structured capability report with graceful fallback selection when optional APIs are missing.
-  - *Verification:* Unit tests in Vitest covering full, partial, and degraded browser environments.
+| ID | Evidence |
+| --- | --- |
+| `E-CI` | CI run `41258212908` on `arena/94e8543e-wasmnux`: all 13 gates green |
+| `E-BOOT-01` | Vanilla Linux reaches `wasmnux-vanilla:~#` in ~2 s / 63.3 M instructions |
+| `E-BOOT-02` | Debian 13.7 reaches `root@wasmnux-debian:/#` in ~3 s / 77.8 M instructions |
+| `E-BB` | In-guest BusyBox: `uname`, `ps`, `free`, `df`, `cat`, `mkdir`, `echo`, `sync`, `poweroff` |
+| `E-DEB-01` | Debian `dpkg 1.22.22`, `apt 3.0.3`, 82 packages, `eth0` `10.0.2.15/24` |
+| `E-DEB-02` | `apt-get update` + `apt-get install -y wasmnux-hello` over VirtIO-Net, then native ELF runs |
+| `E-DEB-03` | Package DB + files survive poweroff → reboot; `apt-get remove` cleans up |
+| `E-PERS-01` | ext4 file content identical after poweroff → reboot with restored overlay |
+| `E-ASSET` | `public/assets-manifest.json` verified by `tests/unit/assets-manifest.test.ts` |
 
-## Phase 2 — Virtualization Core
-- [x] Implement or integrate the selected VM engine (`crates/wasmnux-riscv`, derived from Apache-2.0 `emuko` core with full `wasm32` safety and spec compliance fixes).
-  - *Acceptance:* Pure-Rust `no-OS-thread` VM core compiling cleanly on both 64-bit native and 32-bit `wasm32`.
-  - *Verification:* Unit tests for bus bounds (including >4 GiB physical address rejection on 32-bit `usize`), device dispatch, and VM creation.
-- [x] Implement guest CPU execution (`RV64IMAFDC` + `Zicsr` + `Zifencei` + `Zba`/`Zbb`, M/S/U privilege modes, `sstatus.FS` dirty tracking, `mcounteren`/`scounteren` U-mode counter access, `WFI` timer fast-forward, decoded instruction cache).
-  - *Acceptance:* Passes RV64 integer, multiply/divide, atomic LR/SC/AMO, single/double IEEE-754 FPU, compressed RVC, and privilege transition tests.
-  - *Verification:* Comprehensive ISA unit test suite executing assembled RV64IMAFDC test programs.
-- [x] Implement guest memory (guest RAM device, `Sv39` 3-level page table walker with 4 KiB / 2 MiB / 1 GiB pages, strict `PTE_U` / `SUM` / `MXR` privilege enforcement, hardware `PTE_A` and write-gated `PTE_D` updates, privilege-tagged 2-level software TLB).
-  - *Acceptance:* Prevents User-to-Supervisor memory access, enforces `SUM=0` faults for Supervisor-to-User access, and accurately sets `PTE_D` on first store after load.
-  - *Verification:* Dedicated MMU/TLB security and CoW `PTE_D` unit tests in `wasmnux-riscv`.
-- [x] Implement interrupt handling (CSR `sie`/`sip`/`sstatus.SIE`, trap entry/return `sret`/`mret`, and SiFive-compatible PLIC at `0x0c00_0000`).
-  - *Acceptance:* External device IRQs (UART, VirtIO-Blk, VirtIO-Net) claim/complete cleanly through PLIC and wake `WFI`.
-  - *Verification:* PLIC priority/enable/claim/complete and S-mode interrupt delivery unit tests.
-- [x] Implement virtual clocks and timers (CLINT `mtime`/`mtimecmp` at `0x0200_0000`, SBI `TIME` extension, and Goldfish wall-clock RTC at `0x0010_1000`).
-  - *Acceptance:* Monotonic timer interrupts fire deterministically and guest `date` reads host UTC epoch accurately.
-  - *Verification:* Timer IRQ + Goldfish RTC register read/write tests.
-- [x] Implement the guest boot sequence (RISC-V Linux `Image` PE/header loader at `0x8020_0000`, initramfs placement, dynamic Flattened Device Tree `DTB` builder with `/chosen/rng-seed`, `bootargs`, VirtIO MMIO nodes, `simple-framebuffer`, RTC, and `syscon`, plus SBI v1.0/v2.0 `BASE`/`TIME`/`IPI`/`RFENCE`/`HSM`/`SRST`/`DBCN`).
-  - *Acceptance:* Valid FDT binary (`0xd00dfeed`) parses cleanly by Linux kernel and transitions hart 0 into S-mode with `a0=0, a1=dtb_addr`.
-  - *Verification:* FDT structure validation tests and bare-metal S-mode kernel stub boot test.
-- [x] Implement virtual devices (`Syscon` poweroff/reboot at `0x0010_0000`, `SimpleFb` VRAM at `0x5000_0000` with dirty-tile bitmap, `VirtioRng` at `0x1000_3000`, `VirtioNet` at `0x1000_2000`).
-  - *Acceptance:* Clean hardware poweroff (`0x5555`), reboot (`0x7777`), RNG entropy reads, network frame TX/RX, and dirty scanline tracking on framebuffer writes.
-  - *Verification:* Per-device MMIO and virtqueue unit tests.
-- [x] Implement virtual block storage (`crates/wasmnux-storage` sparse 64 KiB chunked CoW disk + `crates/wasmnux-virtio` `VirtioBlk` MMIO v2 device at `0x1000_1000`).
-  - *Acceptance:* Guest sector reads/writes/flushes (`VIRTIO_BLK_T_IN`/`OUT`/`FLUSH`/`GET_ID`) persist accurately in sparse chunks with dirty-chunk export/import.
-  - *Verification:* Virtqueue descriptor chain tests, multi-sector read/write/flush tests, and corrupt-image rejection tests.
-- [x] Implement a serial console (NS16550A UART at `0x1000_0000`, IRQ 10 + SBI console fallback with lossless RX/TX ring buffers and terminal resize signaling).
-  - *Acceptance:* Bidirectional interactive console I/O with RX interrupt generation and zero dropped bytes under burst output.
-  - *Verification:* UART FIFO, DLAB, LSR, and IRQ line unit tests.
-- [x] Implement lifecycle management (explicit states: create, boot, step quantum, pause, resume, graceful shutdown, reboot, hard reset, deterministic machine + disk snapshot & restore).
-  - *Acceptance:* Invalid state transitions return typed errors; snapshot/restore resumes exact CPU/RAM/device execution identically.
-  - *Verification:* Lifecycle state machine and snapshot round-trip determinism tests.
-- [x] Validate the complete VM execution path (native integration test booting custom RV64 S-mode mini-OS exercising MMU, timer IRQ, UART, VirtIO-Blk, SimpleFB, and SBI shutdown).
-  - *Acceptance:* End-to-end bare-metal S-mode guest executes full hardware path and exits cleanly with expected console & disk state.
-  - *Verification:* `cargo test --workspace` integration test.
+---
 
-## Phase 3 — WASM Runtime
-- [x] Compile the runtime to WASM (`crates/wasmnux-wasm` -> `public/wasm/wasmnux_wasm.wasm`).
-  - *Acceptance:* Optimized WASM binary builds cleanly without undefined imports.
-  - *Verification:* `cargo build --package wasmnux-wasm --target wasm32-unknown-unknown --release` + `WebAssembly.compile` check.
-- [x] Implement Rust/TypeScript bindings (`src/wasm/bindings.ts` wrapping typed WASM exports and linear-memory views with strict bounds validation).
-  - *Acceptance:* Zero `any` types; safe typed methods for VM init, kernel/initrd/disk chunk loading, execution steps, UART I/O, framebuffer dirty reads, dirty disk sync, network packet/HTTP exchange, and snapshots.
-  - *Verification:* Vitest WASM binding integration tests executing the compiled `.wasm` binary in Node.
-- [x] Implement initialization and shutdown (chunked asset loading, memory pre-check, clean WASM instance teardown, zero leaked buffers).
-  - *Acceptance:* Repeated init -> run -> shutdown cycles do not leak memory or listeners.
-  - *Verification:* Multi-cycle lifecycle stress test in Vitest.
-- [x] Implement Web Worker integration (`src/worker/vm.worker.ts` + `src/runtime/vm-client.ts` typed RPC protocol with schema validation).
-  - *Acceptance:* All CPU emulation and OPFS synchronous disk I/O run off the main UI thread inside a dedicated Web Worker, with validated message envelopes and fallback support.
-  - *Verification:* Worker protocol validation tests and UI responsiveness verification.
-- [x] Implement memory management (bounded guest RAM configuration: 128 MiB default Vanilla / 256 MiB default Debian, explicit WASM linear memory ceiling, live telemetry).
-  - *Acceptance:* Rejects out-of-range RAM configurations gracefully; exposes exact guest RAM & WASM heap metrics.
-  - *Verification:* Memory boundary and telemetry unit tests.
-- [x] Implement runtime error handling (structured Rust error codes + panic hook -> typed TS `VmError` events, never silent failures).
-  - *Acceptance:* Corrupt kernels, invalid snapshots, and out-of-memory conditions surface structured, actionable errors.
-  - *Verification:* Negative/fault-injection WASM tests.
-- [x] Validate browser execution (load and run `wasmnux_wasm.wasm` inside real headless Chromium via Playwright).
-  - *Acceptance:* WASM VM initializes and executes guest code inside Chromium Web Worker.
-  - *Verification:* Playwright browser WASM smoke test.
+## Phase 0 — Repository audit and feasibility
 
-## Phase 4 — Persistent Virtual Storage
-- [x] Implement the storage abstraction (`src/storage/storage-engine.ts` unified async/worker block store interface keyed by isolated `profileId`).
-  - *Acceptance:* Clean separation between immutable base OS assets and per-profile mutable sparse block overlays + snapshots.
-  - *Verification:* Storage engine unit tests across profiles.
-- [x] Implement OPFS integration (`src/storage/opfs-backend.ts` supporting Worker `FileSystemSyncAccessHandle` and async `FileSystemWritableFileStream`).
-  - *Acceptance:* Durable chunk persistence in Origin Private File System with header magic and CRC32 verification.
-  - *Verification:* Browser OPFS read/write/reload Playwright test + unit tests.
-- [x] Implement IndexedDB metadata (`src/storage/idb-backend.ts` storing profile manifests, journaled commit generations, snapshots metadata, terminal preferences, and full chunk fallback when OPFS is unavailable).
-  - *Acceptance:* Transactional IndexedDB persistence guarantees durability even when OPFS is blocked.
-  - *Verification:* IndexedDB backend unit and browser fallback tests.
-- [x] Implement persistent disk management (per-profile virtual disk creation, dirty chunk flushing on `VIRTIO_BLK_T_FLUSH` / periodic sync / `visibilitychange` / shutdown, usage metrics, configurable capacity, and explicit profile disk reset).
-  - *Acceptance:* Resetting Vanilla disk leaves Debian disk 100% untouched and vice versa.
-  - *Verification:* Profile isolation and reset tests.
-- [x] Implement crash-consistent updates (two-phase generation journal: write new chunk data + CRC32 first, then atomically advance committed generation pointer; incomplete writes roll back cleanly on recovery).
-  - *Acceptance:* Simulated mid-write interruption recovers previous valid committed disk state with zero ext4 corruption.
-  - *Verification:* Interrupted-write fault-injection recovery tests.
-- [x] Implement quota handling (`navigator.storage.estimate()`, `navigator.storage.persist()` status detection, eviction risk warnings, and graceful `ENOSPC`/quota-exceeded handling).
-  - *Acceptance:* Quota pressure is detected before corruption and surfaced clearly to the UI and guest I/O status.
-  - *Verification:* Quota exhaustion simulation tests.
-- [x] Implement backup and restoration (point-in-time named snapshots + full profile disk backup/restore in browser storage).
-  - *Acceptance:* Restoring a snapshot/backup reverts filesystem state deterministically with checksum verification.
-  - *Verification:* Create file -> snapshot -> delete/modify file -> restore -> verify original file content.
-- [x] Implement import/export (validated `.wasmnux-disk` binary bundle with magic header, schema version, profile metadata, size cap, path sanitization, and SHA-256/CRC32 integrity check).
-  - *Acceptance:* Valid exported disk re-imports cleanly; truncated, tampered, oversized, or path-traversal bundles are rejected safely.
-  - *Verification:* Round-trip export/import test + malicious/corrupted bundle rejection tests.
-- [x] Test complete browser restart persistence (Playwright full page reload AND closing browser context / reopening fresh browser context on persistent userDataDir).
-  - *Acceptance:* Guest files, `/etc` configs, and Debian package states survive both reload and full browser restart.
-  - *Verification:* Playwright persistent-context restart test.
+- [x] Inventory the starting repository (`LICENSE`, single `c023751` commit) and record it. `E-CI`
+- [x] Identify host toolchains and registries reachable from the build environment.
+- [x] Justify hardware ISA emulation in WASM instead of compiling Linux to `wasm32` (`docs/ARCHITECTURE.md`).
+- [x] Comparative audit of `emuko`, `riscv-rust`, `rvemu`, `RV64emu-rs`, `v86` (`docs/ARCHITECTURE.md`).
+- [x] Select RV64GC `lp64d` + `Sv39` as the guest architecture.
+- [x] Verify kernel provenance: `gregkh/linux` tag `v7.3.1` = `dfc1145bbaa1c5dd626fd25d9ae8fc277864e7bd`. `docs/ASSETS.md`
+- [x] Verify Debian provenance: `trixie` `rootfs.debian_version` = `13.7` from official `docker-debian-artifacts`. `docs/ASSETS.md`
+- [x] Document dependency and licence inventory (`THIRD_PARTY_NOTICES.md`, `docs/SECURITY.md`).
+- [x] Document limitations and security boundaries (`docs/ARCHITECTURE.md`, `docs/SECURITY.md`).
+
+## Phase 1 — Project foundation
+
+- [x] Rust workspace: `wasmnux-riscv`, `wasmnux-storage`, `wasmnux-virtio`, `wasmnux-net`, `wasmnux-wasm`. `E-CI`
+- [x] Strict TypeScript app (`strict`, `noUncheckedIndexedAccess`) building with Vite. `E-CI`
+- [x] `wasm32-unknown-unknown` release build via `scripts/build-wasm.sh`. `E-CI`
+- [x] rustfmt + Clippy `-D warnings` (host and `wasm32`) + ESLint + Prettier. `E-CI`
+- [x] CI covering Rust, TypeScript, Vitest and Playwright. `E-CI`
+- [x] CI failure diagnostics: every gate's output is teed and the decisive excerpts are
+  re-published as annotations and to a `ci-diagnostics` branch, because run logs live in
+  object storage that restricted networks cannot reach.
+- [x] Browser capability detection with graceful degradation (`tests/unit/capabilities.test.ts`).
+
+## Phase 2 — Virtualization core
+
+- [x] Single-hart RV64IMAFDC + Zicsr/Zifencei/Zba/Zbb interpreter, M/S/U modes.
+- [x] RV64M divide/remainder edge semantics (div by zero, `MIN / -1`) — `rv64m_div_rem_zero_and_overflow_semantics_match_riscv_spec`.
+- [x] `FCVT.L.D` / `FCVT.LU.D` / `FCVT.D.LU` saturation semantics — `fcvt_l_d_and_fcvt_d_lu_saturate`.
+- [x] RVC (compressed) expansion, including `C.ADDI`/`C.SUB` decimal encodings.
+- [x] `Sv39` page walker with `PTE_U`/`SUM`/`SMEP`/`PTE_A`/`PTE_D` enforcement — `sv39_enforces_pte_u_sum_smep_and_cow_dirty_bit`.
+- [x] Byte-accurate unaligned 4/8-byte guest accesses, with faults when they leave RAM — `unaligned_guest_access_is_byte_accurate_and_bounds_checked`.
+- [x] Malformed kernel `Image` rejection (short/bad magic) and oversized/empty payload rejection — `malformed_kernel_images_are_rejected`.
+- [x] PLIC interrupt delivery, CLINT timer, `WFI`/`SRET` returns.
+- [x] Dynamic FDT generation (`0xd00dfeed`) and RISC-V `Image` load protocol.
+- [x] SBI v1/v2 `BASE`/`TIME`/`IPI`/`RFENCE`/`HSM`/`SRST`/`DBCN`.
+- [x] VirtIO-MMIO block, net and RNG devices with interrupt-driven virtqueues.
+- [x] Goldfish RTC and syscon poweroff/reboot.
+- [x] Full VM snapshot save/restore and deterministic replay (`tests/unit/wasm-runtime.test.ts`).
+- [ ] Multi-hart (SMP) execution. *(Single hart only; the FDT advertises one hart.)*
+
+## Phase 3 — WASM runtime and ABI
+
+- [x] Zero-import WASM module with a versioned C ABI (43 exports, `imports: []`). `E-CI`
+- [x] Strict TypeScript bindings with bounds validation and typed error kinds (`tests/unit/wasm-runtime.test.ts`).
+- [x] Dedicated module `Worker` transport with RPC schema validation.
+- [x] Multi-cycle create → boot → snapshot → restore → destroy without handle leaks.
+- [x] Reject corrupt snapshots and corrupt disk bundles with typed errors.
+- [x] Explicit lifecycle states (`created`/`running`/`paused`/`powered_off`/`reboot`).
+- [ ] WASM memory growth is bounded by configuration, but a long-running soak test
+  (hours, many reboots) has not been executed.
+
+## Phase 4 — Persistent virtual storage
+
+- [x] Sparse 64 KiB copy-on-write overlay over an immutable base image.
+- [x] CRC32-bearing chunk envelope with versioned magic (`WXNC`), profile isolation.
+- [x] Atomic quota enforcement and read-only mode (Rust `wasmnux-storage` tests).
+- [x] Crash-consistent generation journal; orphaned chunks roll back on recovery.
+- [x] Disk bundle export/import with SHA-256 + CRC verification and traversal rejection.
+- [x] OPFS writes are bounded to 64 KiB pieces and the persisted size is verified, so a
+  short write is reported as `io_interrupted` instead of silently truncating a chunk —
+  `tests/unit/opfs-write-integrity.test.ts`.
+- [x] IndexedDB fallback backend with the same envelope format.
+- [x] Guest ext4 contents survive poweroff → reboot exactly. `E-PERS-01`
+- [x] Disk state survives a full browser-process restart (`launchPersistentContext`). `E-CI`
+- [ ] Real browser quota exhaustion (navigator quota) is exercised only through simulated
+  quota in unit tests, not by filling a real origin until the browser refuses writes.
+- [ ] Cross-tab concurrency (two tabs on one profile) is not locked with the Web Locks API.
 
 ## Phase 5 — Vanilla Linux
-- [x] Retrieve and verify the latest stable upstream Linux kernel (`v7.3.1` from official `gregkh/linux` upstream stable git repository).
-  - *Acceptance:* Verified tag `v7.3.1` (`dfc1145bbaa1c5dd626fd25d9ae8fc277864e7bd`) checked out and provenance documented.
-  - *Verification:* `git rev-parse v7.3.1^{commit}` and `make kernelversion` == `7.3.1`.
-- [x] Configure the kernel for the guest architecture (`configs/linux-7.3.1-riscv64.config` targeting `RV64GC` `Sv39`).
-  - *Acceptance:* Reproducible minimal kernel config enabling SMP=n, FPU, RVC, Sv39, futex/epoll/cgroups/namespaces/seccomp, ext4, tmpfs, procfs, sysfs, devtmpfs.
-  - *Verification:* Kernel `.config` inspection and `olddefconfig` reproducibility check.
-- [x] Enable the required virtual-device drivers (`SERIAL_8250_CONSOLE`, `HVC_RISCV_SBI`, `VIRTIO_MMIO`, `VIRTIO_BLK`, `VIRTIO_NET`, `HW_RANDOM_VIRTIO`, `FB_SIMPLE`, `FRAMEBUFFER_CONSOLE`, `RTC_DRV_GOLDFISH`, `POWER_RESET_SYSCON`).
-  - *Acceptance:* All virtual hardware drivers compiled built-in (`=y`).
-  - *Verification:* Automated `.config` assertion check.
-- [x] Build the kernel (`scripts/build-kernel.sh` producing `arch/riscv/boot/Image` and `public/images/vmlinux-7.3.1-riscv64.Image.gz`).
-  - *Acceptance:* Clean `riscv64` Linux 7.3.1 kernel `Image` builds from upstream C source with zero errors.
-  - *Verification:* RISC-V Linux `Image` magic (`RSC\x05`) and version string verification.
-- [x] Build BusyBox (`scripts/build-busybox.sh` compiling official BusyBox C source statically for `riscv64-linux-musl` with all required applets).
-  - *Acceptance:* Genuine `riscv64` static ELF BusyBox binary containing every required applet (`sh`, `ash`, `ls`, `cd`, `cat`, `cp`, `mv`, `rm`, `mkdir`, `rmdir`, `mount`, `umount`, `ps`, `kill`, `dmesg`, `uname`, `free`, `df`, `du`, `grep`, `sed`, `awk`, `find`, `tar`, `gzip`, `touch`, `chmod`, `chown`, `ln`, `readlink`, `date`, `sleep`, `top`, `reboot`, `poweroff`, plus networking/diagnostic utilities).
-  - *Verification:* `readelf -h busybox` (`RISC-V`, 64-bit, static) and `--list` applet verification.
-- [x] Build the initramfs (`scripts/build-vanilla-rootfs.sh` assembling SVR4 `newc` gzipped cpio archive `public/images/vanilla-initramfs.cpio.gz`).
-  - *Acceptance:* Standard system hierarchy (`/bin`, `/sbin`, `/usr/bin`, `/usr/sbin`, `/etc`, `/proc`, `/sys`, `/dev`, `/tmp`, `/var`, `/run`, `/root`, `/home`, `/mnt/persist`) with BusyBox symlinks.
-  - *Verification:* Archive structure check.
-- [x] Implement `/init` (mounting `/proc`, `/sys`, `/dev` `devtmpfs`, `/dev/pts`, `/tmp`, mounting persistent ext4 `/dev/vda` on `/persist` with `/root` & `/etc/persist` bind/overlay persistence, configuring hostname/network `eth0` + framebuffer banner on `/dev/fb0`, and launching interactive job-control `ash` shell).
-  - *Acceptance:* Clean boot without panics or tty job-control warnings; clean `sync` + `umount` on shutdown/reboot.
-  - *Verification:* Kernel + `/init` console log verification.
-- [x] Implement a usable root filesystem (formatted `ext4` persistent virtual disk `public/images/vanilla-disk.ext4.gz` mounted automatically at boot for durable user/config data + diagnostic tools `wasmnux-diag`).
-  - *Acceptance:* Files written in `/root`, `/home`, or `/persist` reside on real `ext4` `/dev/vda` and persist across reboots.
-  - *Verification:* `df -T` showing `ext4` on `/dev/vda` and cross-reboot file survival test.
-- [x] Boot the actual Linux kernel (execute Linux 7.3.1 in `wasmnux-wasm` and verify full `dmesg` boot log to interactive shell).
-  - *Acceptance:* `uname -r` outputs `7.3.1`, `uname -m` outputs `riscv64`, console reaches prompt in < 5s.
-  - *Verification:* Automated WASM boot test inspecting real kernel logs and `uname -a`.
-- [x] Validate essential BusyBox commands (execute behavioral tests inside booted Linux 7.3.1 VM for all 35+ required applets including `top -b -n 1`, `ps`, `kill`, `mount`/`umount`, `tar`/`gzip`, `grep`/`sed`/`awk`, `find`, `ln`/`readlink`, `chmod`/`chown`, `df`/`du`/`free`, `dmesg`, `date`, `sleep`, `reboot`, `poweroff`).
-  - *Acceptance:* Every listed command executes inside the real guest kernel and produces verified behavioral output.
-  - *Verification:* Automated guest command test harness in Rust/Vitest and Playwright.
-- [x] Validate persistent filesystem access (create/modify/delete files & directories on `/dev/vda`, `poweroff`, re-create VM from persisted chunks, reboot, verify exact SHA-256/content match).
-  - *Acceptance:* 100% data survival across VM shutdown/reboot and browser reload.
-  - *Verification:* Automated persistence integration test + Playwright E2E test.
 
-## Phase 6 — Debian Compatibility
-- [x] Identify the latest stable Debian release (Debian `13.7` `"trixie"` official `riscv64` release).
-  - *Acceptance:* Verified against `debian.org` and `debuerreotype/docker-debian-artifacts` (`DEBIAN_VERSION_FULL=13.7`).
-  - *Verification:* Recorded in `docs/ARCHITECTURE.md` and `docs/TEST_REPORT.md`.
-- [x] Retrieve and verify the appropriate Debian root filesystem (`trixie/slim/oci/blobs/rootfs.tar.gz` from `debuerreotype/docker-debian-artifacts` `dist-riscv64` with SHA-256 verification).
-  - *Acceptance:* Official Debian 13.7 `riscv64` userland (`glibc 2.41`, `bash 5.2.37`, `apt 3.0.3`, `dpkg 1.22.22`, `coreutils 9.7`) extracted and formatted into real `ext4` root disk image `public/images/debian-rootfs.ext4.gz`.
-  - *Verification:* SHA-256 verification + `e2fsck -fy` check on generated `ext4` image.
-- [x] Configure the compatible kernel (ensure Linux 7.3.1 config supports all Debian 13 `glibc 2.41` / `apt 3.0.3` / `dpkg 1.22.22` syscalls: `__riscv_hwprobe`, `futex`, `io_uring`, `seccomp`, `cgroups`, `namespaces`, `posix_timers`, `sysvipc`, `ext4` xattrs/ACLs, `inet`/`packet`/`unix` sockets).
-  - *Acceptance:* Linux 7.3.1 boots Debian 13.7 `ext4` `/dev/vda` rw without missing-syscall errors.
-  - *Verification:* Boot log and `apt`/`dpkg` execution test.
-- [x] Implement Debian boot integration (fast deterministic Debian `/etc/init.d/rcS` + `/usr/sbin/init` mounting `/proc`, `/sys`, `/dev`, `/dev/pts`, `/run`, `/tmp`, configuring hostname, loopback `lo` + `eth0` `10.0.2.15/24`, `/etc/resolv.conf`, `/dev/fb0` console notice, and starting login/shell session with clean `reboot`/`poweroff` `rcK` scripts).
-  - *Acceptance:* Boots genuine Debian 13.7 `ext4` rootfs `/dev/vda` cleanly in WASM in seconds.
-  - *Verification:* Automated Debian boot test checking `/etc/os-release` and `uname -a`.
-- [x] Implement login and shell access (configured root/user environment with working `login` capability and automatic console login into real Debian `bash 5.2` interactive shell).
-  - *Acceptance:* Interactive `bash` shell with proper `PATH`, `HOME`, `TERM=xterm-256color`, user switching (`su`/`login`), and job control.
-  - *Verification:* Automated shell & user environment test inside booted Debian VM.
-- [x] Validate BusyBox (include compiled `riscv64` `busybox` inside Debian `/usr/bin/busybox` + package and verify applet execution alongside GNU coreutils).
-  - *Acceptance:* `busybox --list` and `busybox uname -a` / applets work inside Debian 13.7.
-  - *Verification:* Automated Debian BusyBox test.
-- [x] Validate `apt` (configure real HTTP APT repository `http://apt.wasmnux.local/debian-repo trixie main` served over `virtio-net` + Rust TCP/IP stack + browser Fetch bridge, containing genuine `riscv64` `.deb` packages with valid `Packages`, `Packages.xz`, and `Release` metadata).
-  - *Acceptance:* `apt-get update` and `apt-cache search` / `apt-cache policy` execute real `/usr/lib/apt/methods/http` over guest TCP/IP and update `/var/lib/apt/lists/`.
-  - *Verification:* Automated `apt-get update` + `apt-cache policy` test in booted Debian VM.
-- [x] Validate `dpkg` (`dpkg -l`, `dpkg -L`, `dpkg -s`, `dpkg --audit` against real Debian 13.7 `/var/lib/dpkg/status`).
-  - *Acceptance:* `dpkg -l` lists official Debian 13.7 `riscv64` packages with zero broken states (`dpkg --audit` empty).
-  - *Verification:* Automated `dpkg` query & consistency test.
-- [x] Validate package installation and removal (`apt-get install -y <pkg>`, execute the newly installed `riscv64` ELF binary, then `apt-get remove -y <pkg>` and verify removal).
-  - *Acceptance:* Real `.deb` package is downloaded over `virtio-net`, unpacked by `dpkg`, executed as a real `riscv64` ELF binary in guest userspace, and cleanly removed when requested.
-  - *Verification:* Automated install -> run binary -> remove -> install test.
-- [x] Validate package database persistence (persist dirty `ext4` chunks after `apt-get install`, shut down VM, restore from persisted storage, verify `/var/lib/dpkg/status` and installed binary remain intact and offline-usable).
-  - *Acceptance:* Installed package works immediately after reboot even with network offline.
-  - *Verification:* Offline reboot persistence test.
-- [x] Validate Debian operation after browser restart (Playwright E2E test booting Debian, installing a package via `apt`, reloading/restarting Chromium, booting Debian again, and executing the installed package).
-  - *Acceptance:* Full browser reload/restart preserves installed Debian packages and `/etc` / `/root` edits.
-  - *Verification:* Playwright E2E Debian persistence test.
+- [x] Kernel `Image` boots: VFS, ext4, VirtIO-Blk, PLIC, RTC, `simplefb` all initialise. `E-BOOT-01`
+- [x] BusyBox shell is interactive; `uname`, `ps`, `free`, `df`, `cat`, `mkdir`, `echo`, `sync` behave. `E-BB`
+- [x] Persistent ext4 root mounted from `/dev/vda`; files survive a reboot. `E-PERS-01`
+- [x] Clean `poweroff` through syscon; clean `reboot` through SBI S-RST.
+- [x] Boot and persistence replay in Playwright inside real Chromium. `E-CI`
+- [ ] The shipped kernel/initramfs/disk were built outside this environment. The build
+  scripts (`scripts/build-kernel.sh`, `scripts/build-busybox.sh`,
+  `scripts/build-vanilla-rootfs.sh`) exist and are documented, but a from-source rebuild
+  has not been re-executed and byte-compared here.
+- [ ] BusyBox 1.37.0. Assets currently ship 1.36.1; bumping requires rebuilding the
+  initramfs and ext4 image and re-running the applet suite (see `docs/ASSETS.md`).
 
-## Phase 7 — WebGPU and Graphics
-- [x] Implement WebGPU initialization (`src/gpu/webgpu-renderer.ts` adapter negotiation, device creation, capability limits inspection, `<canvas>` `webgpu` context configuration).
-  - *Acceptance:* Acquires real `GPUAdapter` and `GPUDevice` when supported and reports adapter info cleanly.
-  - *Verification:* Unit tests + Chromium WebGPU Playwright test.
-- [x] Implement the graphics presentation pipeline (WGSL compute shader converting guest `XRGB8888`/`BGRX8888` scanlines into `rgba8unorm` texture + WGSL vertex/fragment presentation pipeline with aspect-preserving scaling and optional CRT/sharpness modes).
-  - *Acceptance:* Shaders compile with zero WGSL validation errors and present guest pixels accurately.
-  - *Verification:* Shader compilation and pixel readback verification test.
-- [x] Integrate the selected virtual graphics device (`simple-framebuffer` at `0x5000_0000` driven by Linux `simplefb` + `fbcon` `/dev/fb0` + guest framebuffer drawing tool `wasmnux-fbtest`).
-  - *Acceptance:* Linux kernel initializes `simple-framebuffer` `640x400` `/dev/fb0` (`fbcon`) during boot and renders real pixels into VRAM.
-  - *Verification:* Boot log `simple-framebuffer` check + non-zero VRAM pixel verification.
-- [x] Implement framebuffer updates (dirty-scanline bitmap in Rust WASM transferring only modified scanline ranges to the renderer per animation frame).
-  - *Acceptance:* Unchanged frames incur zero GPU texture upload traffic; modified scanlines update immediately.
-  - *Verification:* Dirty-region tracking unit and integration tests.
-- [x] Implement resizing (responsive `<canvas>` viewport resize + guest framebuffer resolution reconfiguration handling without resource leaks).
-  - *Acceptance:* Resizing container reconfigures swapchain/viewport cleanly without distortion or crashes.
-  - *Verification:* Dynamic resize tests on both WebGPU and Canvas2D renderers.
-- [x] Implement resource cleanup (`destroy()` releasing GPU buffers, textures, bind groups, pipelines, and unconfiguring canvas context on VM stop/switch).
-  - *Acceptance:* Zero leaked GPU objects across renderer switches or VM restarts.
-  - *Verification:* Renderer lifecycle cleanup tests.
-- [x] Implement device-loss recovery (`device.lost` handler automatically re-initializing WebGPU device or seamlessly failing over to `Canvas2DRenderer` without interrupting the running Linux VM).
-  - *Acceptance:* Simulated `device.destroy()` / device-loss event recovers rendering automatically while guest Linux continues running.
-  - *Verification:* Device-loss fault-injection test.
-- [x] Implement a fallback renderer (`src/gpu/canvas2d-renderer.ts` converting guest `BGRX8888` dirty scanlines into `ImageData` and presenting via Canvas 2D `putImageData`).
-  - *Acceptance:* Identical visual output when WebGPU is unavailable or disabled by user toggle.
-  - *Verification:* Canvas 2D pixel accuracy and Playwright WebGPU-disabled E2E test.
-- [x] Validate rendering on real browsers (Playwright tests verifying live framebuffer pixels after Linux boot and `/dev/fb0` writes under WebGPU-enabled and WebGPU-disabled browser setups).
-  - *Acceptance:* Verified non-blank rendered Linux framebuffer in real Chromium `<canvas>`.
-  - *Verification:* Playwright canvas pixel inspection evidence in `docs/TEST_REPORT.md`.
+## Phase 6 — Debian compatibility
 
-## Phase 8 — Browser Interface
-- [x] Implement the Linux profile selector (clean switcher between **Vanilla Linux 7.3.1 (BusyBox)** and **Debian 13.7 "trixie"**, displaying independent disk status, kernel/OS version, and RAM config).
-  - *Acceptance:* Switching profiles cleanly stops/saves or isolates active state without cross-contaminating disks.
-  - *Verification:* UI component & Playwright profile switching test.
-- [x] Implement VM controls (Boot, Pause/Resume, Reboot, Graceful Shutdown, Hard Reset, and Profile Disk Reset with confirmation).
-  - *Acceptance:* Every control reflects live VM state accurately and prevents race conditions during transitions.
-  - *Verification:* Playwright control lifecycle tests.
-- [x] Implement the interactive terminal (`@xterm/xterm` + `@xterm/addon-fit` wired directly to guest NS16550A UART console stream — zero TS command faking).
-  - *Acceptance:* Real-time ANSI colors, cursor movement, tab completion, command history, and Ctrl+C/Ctrl+D/Ctrl+L signals pass directly to guest tty.
-  - *Verification:* Playwright interactive terminal typing & output verification.
-- [x] Implement keyboard handling (full printable ASCII/UTF-8, arrow keys, function keys, Ctrl combinations, and focus management between terminal and framebuffer).
-  - *Acceptance:* Control sequences (`Ctrl+C` SIGINT, `Ctrl+D` EOF, arrow history in `ash`/`bash`) work natively in guest shells.
-  - *Verification:* Terminal key-mapping unit tests + Playwright Ctrl+C/history test.
-- [x] Implement clipboard integration (Copy selection + Paste text into UART RX FIFO with chunked flow-control and graceful permission fallback).
-  - *Acceptance:* Multi-line scripts pasted via clipboard execute cleanly without overflowing UART RX FIFO.
-  - *Verification:* Clipboard paste flow-control tests.
-- [x] Implement terminal resizing (`FitAddon` cols/rows detection + `stty cols X rows Y` / resize helper synchronization + persistent font size/theme settings).
-  - *Acceptance:* Terminal dimensions adapt to viewport resize and persist user font/theme preferences across reloads.
-  - *Verification:* Resize and persistent terminal settings tests.
-- [x] Implement disk and memory information (live telemetry panel showing guest RAM size, WASM linear memory bytes, MIPS / instruction counter, dirty disk chunks, persisted disk usage, storage quota & `persist()` status).
-  - *Acceptance:* Telemetry reflects real runtime measurements updated from the Worker.
-  - *Verification:* Telemetry accuracy verification in Playwright.
-- [x] Implement boot diagnostics (real-time phase timeline, kernel `dmesg` log viewer/filter, boot duration stopwatch, and downloadable diagnostic report).
-  - *Acceptance:* Captures real kernel boot milestones (`Linux version 7.3.1`, `virtio_blk`, `simple-framebuffer`, `Run /init`) with measured timestamps.
-  - *Verification:* Boot diagnostics parser & UI verification test.
-- [x] Implement snapshot management (create named VM + disk snapshot, list snapshots per profile with size/timestamp, restore snapshot, delete snapshot, plus Export Disk / Import Disk / Backup & Restore controls).
-  - *Acceptance:* Full UI workflow for snapshots and disk import/export works end-to-end per profile.
-  - *Verification:* Playwright snapshot & disk export/import E2E test.
-- [x] Implement error reporting (non-intrusive dismissible error banner + structured event log capturing storage, WebGPU, network, and WASM faults without unhandled rejections).
-  - *Acceptance:* Zero `pageerror` or unhandled promise rejections during normal and fault-injected Playwright runs.
-  - *Verification:* Playwright error-listener assertions across all E2E tests.
-- [x] Implement PWA offline capability (`manifest.webmanifest` + Service Worker caching application shell and static WASM/kernel/image assets separately from OPFS/IndexedDB guest storage).
-  - *Acceptance:* Application shell and cached assets load offline while preserving guest OS disks in OPFS/IDB.
-  - *Verification:* Service worker registration & asset separation test.
+- [x] Official Debian 13 (`trixie`) `riscv64` rootfs boots to a root shell. `E-DEB-01` `E-BOOT-02`
+- [x] `uname`, `cat /etc/debian_version` (`13.7`), `dpkg --version` (`1.22.22`), `apt-get --version` (`3.0.3`). `E-DEB-01`
+- [x] GNU/busybox userspace utilities and a working `dpkg -l` (82 packages). `E-DEB-01`
+- [x] `apt-get update` against the configured repository over `eth0` (`10.0.2.15/24`). `E-DEB-02`
+- [x] `apt-get install -y` of a real `riscv64` `.deb`; the installed native ELF executes. `E-DEB-02`
+- [x] `apt-get remove` removes the package and its files; `dpkg-query` confirms absence. `E-DEB-03`
+- [x] Package database and files persist across poweroff → reboot. `E-DEB-03`
+- [x] Package state persists across a browser reload. `E-CI`
+- [ ] **Official Debian archive access.** The guest's `debian.sources` is deliberately
+  disabled and apt points at the bundled four-package repository
+  (`http://apt.wasmnux.local/debian-repo`). This proves apt/dpkg work over a real HTTP
+  index on the emulated NIC; it is **not** access to `deb.debian.org`. Closing this needs
+  a documented relay/egress design (see Phase 9).
+- [ ] Installing a large real-world package tree (e.g. `build-essential`) from an official
+  mirror. Blocked by the item above.
+- [ ] `systemd`-based boot. The guest uses a minimal `rcS` console init, not `systemd`.
+
+## Phase 7 — Graphics
+
+- [x] Guest `simple-framebuffer` at `0x5000_0000`, dirty-scanline tracking, XRGB8888.
+- [x] WebGPU compute+render pipeline presents real guest `/dev/fb0` frames. `E-CI`
+- [x] Canvas 2D fallback renders identical pixels when WebGPU is unavailable. `E-CI`
+- [x] Resize handling and GPU device-loss recovery without restarting the guest. `E-CI`
+- [ ] Hardware (non-SwiftShader) WebGPU validation. CI Chromium exposes a software
+  adapter; a run on real GPU hardware has not been recorded.
+- [ ] Input devices (keyboard/pointer into guest `/dev/input`) are not implemented; the
+  console is driven through the serial terminal.
+
+## Phase 8 — Browser interface
+
+- [x] xterm.js terminal wired to the guest UART; typing reaches the guest. `E-CI`
+- [x] Pause/resume, profile switching, persistent UI settings. `E-CI`
+- [x] Snapshot **creation** with a named entry in the UI. `E-CI`
+- [x] Snapshot save/restore at the WASM ABI level with deterministic replay.
+- [x] Invalid disk import surfaces a dismissible error banner; no unhandled rejections. `E-CI`
+- [x] Structured diagnostics, capability report and milestone list. `E-CI`
+- [x] Service worker registers and caches the app shell. `E-CI`
+- [ ] Snapshot **restore** and **delete** through the UI. Only creation is E2E-tested;
+  restore/delete are covered at the ABI level but not driven through the browser.
+- [ ] Offline cold start from the service worker cache with the network disabled. The
+  worker registers, but a `context.setOffline(true)` boot has not been run.
+- [ ] Firefox and WebKit. Only Chromium is executed.
 
 ## Phase 9 — Networking
-- [x] Evaluate browser networking restrictions (raw sockets/ICMP/ARP forbidden in browser sandbox; cross-origin HTTP constrained by CORS; outbound TCP requires HTTP Fetch bridge or WebSocket relay).
-  - *Acceptance:* Documented accurately in `docs/ARCHITECTURE.md` and `docs/SECURITY.md`.
-  - *Verification:* Documentation audit.
-- [x] Select a compatible networking architecture (`VirtioNet` `eth0` <-> Rust user-mode Ethernet/ARP/ICMP/DHCP/DNS/TCP stack `10.0.2.0/24` <-> TypeScript Browser HTTP Fetch & optional WebSocket relay bridge).
-  - *Acceptance:* Allows unmodified guest Linux networking (`ip`, `ping 10.0.2.2`, DNS lookup, `wget`, Debian `apt` HTTP transport) inside standard browser security rules.
-  - *Verification:* Architecture design & packet-flow unit tests.
-- [x] Implement a network bridge where feasible (`crates/wasmnux-net` + `src/net/network-bridge.ts` mapping `http://apt.wasmnux.local/*` to same-origin `/debian-repo/*` and permitting CORS-safe HTTPS/HTTP fetches with strict private-IP/SSRF filtering).
-  - *Acceptance:* Real Ethernet frames traverse guest kernel -> VirtIO-Net -> Rust TCP stack -> TS Fetch bridge -> Rust TCP segments -> guest socket.
-  - *Verification:* Rust TCP/ARP/DNS/DHCP unit tests + TS network bridge security tests.
-- [x] Integrate guest network interfaces (configure `eth0` `10.0.2.15/24`, gateway `10.0.2.2`, DNS `10.0.2.3` in both Vanilla Linux and Debian 13.7).
-  - *Acceptance:* `ip addr show eth0` shows `UP` with `10.0.2.15/24` in both profiles.
-  - *Verification:* Booted VM `ip addr` and `ip route` verification.
-- [x] Validate DNS and connectivity (`ping -c 2 10.0.2.2`, DNS query for `apt.wasmnux.local`, and HTTP download via `wget`/TCP in guest).
-  - *Acceptance:* Real ICMP replies and HTTP payload retrieval inside booted Linux guest.
-  - *Verification:* Automated guest connectivity test.
-- [x] Validate Debian repository access (`apt-get update` and `apt-get install` pulling real `riscv64` `.deb` packages over `eth0` `http://apt.wasmnux.local/debian-repo`).
-  - *Acceptance:* Zero mocks — genuine Debian `apt` HTTP method over guest `eth0` VirtIO-Net.
-  - *Verification:* Automated Debian `apt` over `virtio-net` integration & Playwright E2E test.
-- [x] Document network limitations and deployment requirements (COOP/COEP headers if `SharedArrayBuffer` desired, CORS constraints on arbitrary external HTTP hosts, optional WebSocket L2/TCP relay protocol for unrestricted external TCP/TLS).
-  - *Acceptance:* Clear deployment guide in `docs/ARCHITECTURE.md` and `README.md`.
-  - *Verification:* Documentation review.
 
-## Phase 10 — Security and Reliability
-- [x] Audit the WASM boundary (validate all pointer/length pairs, cap guest RAM & disk chunk sizes, forbid `eval`/`new Function`, isolate linear memory per Worker).
-  - *Acceptance:* Out-of-bounds or malformed calls across JS<->WASM fail safely with typed errors.
-  - *Verification:* Boundary fuzz/negative unit tests.
-- [x] Audit worker communication (runtime schema validation on every `postMessage` payload between main thread and VM Worker).
-  - *Acceptance:* Malformed worker messages are rejected and logged without crashing the Worker or UI.
-  - *Verification:* Invalid worker message unit tests.
-- [x] Audit disk imports (enforce magic bytes, version check, max uncompressed size ceiling, chunk index bounds, profile ID sanitization, and CRC32/SHA-256 verification; no tar/zip archive path extraction in host context).
-  - *Acceptance:* Tampered, oversized, and path-traversal payloads (`../../etc/passwd`) are deterministically rejected.
-  - *Verification:* Security test suite for disk import/export.
-- [x] Audit filesystem operations (strict OPFS filename allowlist `^[a-z0-9_-]+$`, zero host filesystem exposure, guest storage strictly sandboxed to browser origin).
-  - *Acceptance:* Path traversal attempts in profile/snapshot names are rejected.
-  - *Verification:* Storage path-sanitization unit tests.
-- [x] Audit external dependencies (minimal Rust & npm dependency tree; document license, version, and purpose of every dependency in `THIRD_PARTY_NOTICES.md` and `docs/SECURITY.md`).
-  - *Acceptance:* Zero unvetted dependencies; `npm audit` / manual license & security review documented.
-  - *Verification:* Dependency inventory check.
-- [x] Test crash recovery (interrupt VM mid-write, reload Worker/storage, verify journal rollback and clean `ext4` mount).
-  - *Acceptance:* Guest boots cleanly after simulated power loss during disk I/O.
-  - *Verification:* Crash-consistency automated test.
-- [x] Test invalid input (corrupted kernel binary, truncated initramfs, invalid snapshot blob, malformed network frames).
-  - *Acceptance:* Every invalid input returns a clean error without panicking or hanging the UI.
-  - *Verification:* Negative input test suite across Rust and TypeScript.
-- [x] Test storage exhaustion (simulate low `StorageEstimate` quota / write failure and verify graceful error reporting + survival of previously committed state).
-  - *Acceptance:* Quota failure surfaces clear UI warning and preserves existing committed disk chunks.
-  - *Verification:* Quota exhaustion unit & Playwright tests.
-- [x] Test resource cleanup (start -> boot -> stop -> restart VM 5x verifying stable WASM memory, closed Worker, and cleaned GPU/DOM listeners).
-  - *Acceptance:* Bounded memory usage across repeated restarts; zero listener leaks.
-  - *Verification:* Multi-restart reliability & memory benchmark test.
-- [x] Verify isolation between Linux profiles (write secret marker file in Vanilla Linux, reset/modify Debian, verify marker never appears in Debian and Vanilla survives Debian reset).
-  - *Acceptance:* Complete storage, snapshot, and RAM isolation between `vanilla` and `debian`.
-  - *Verification:* Automated cross-profile isolation test.
+- [x] Documented browser networking constraints (no raw sockets/ICMP/ARP; fetch bridge).
+- [x] Rust user-mode Ethernet/ARP/ICMP/DNS/DHCP/TCP stack behind VirtIO-Net.
+- [x] `eth0` up with `10.0.2.15/24`, gateway `10.0.2.2`, DNS `10.0.2.3`. `E-DEB-01`
+- [x] HTTP bridge: guest TCP → `wasmnux_net_pop_http_request` → host fetch → guest socket. `E-DEB-02`
+- [x] SSRF filtering of private/loopback destinations (`tests/unit/network-bridge.test.ts`).
+- [ ] Arbitrary internet HTTPS/TLS. There is no TLS implementation and no documented
+  relay protocol, so guests cannot reach the public web (including official Debian mirrors).
+- [ ] Long-lived connections / WebSocket relay. Not implemented.
 
-## Phase 11 — Comprehensive Testing
-- [x] Complete Rust tests (`cargo fmt --all -- --check`, `cargo check`, `cargo test`, `cargo clippy --all-targets --all-features -- -D warnings`).
-- [x] Complete TypeScript tests (`tsc --noEmit`, ESLint, Prettier check, Vitest unit & integration suites).
-- [x] Complete WASM tests (compilation, bindings, memory bounds, error propagation, Worker execution).
-- [x] Complete kernel boot tests (Linux 7.3.1 boot log, device init, MMU, timer/PLIC IRQs, console, ext4 mount, clean poweroff & reboot).
-- [x] Complete BusyBox tests (behavioral verification of all 35+ required applets inside booted Linux 7.3.1).
-- [x] Complete Debian tests (Debian 13.7 boot, bash login, GNU utilities, BusyBox, `dpkg`, `apt update`, `apt install`, binary execution, `apt remove`, offline & reload persistence).
-- [x] Complete storage tests (file CRUD, directory ops, reload, full browser restart, snapshots, backup/restore, disk import/export, quota pressure, interrupted writes).
-- [x] Complete WebGPU tests (adapter/device init, WGSL shader compilation, `/dev/fb0` rendering, dirty texture updates, resize, cleanup, device-loss recovery, Canvas 2D fallback).
-- [x] Complete browser integration tests (Worker lifecycle, capability detection, clipboard paste, diagnostics, PWA asset caching).
-- [x] Complete end-to-end tests (full 16-step Playwright user workflow across Vanilla Linux & Debian 13.7 + WebGPU/fallback/storage configurations).
-- [x] Run regression tests (full clean-slate execution of all Rust, TypeScript, WASM, and Playwright suites + performance benchmarks).
-- [x] Produce the final evidence report (`docs/TEST_REPORT.md` with test IDs, requirements covered, exact commands, measured benchmarks, logs, and pass/fail results).
+## Phase 10 — Security and reliability
 
-## Phase 12 — Release Readiness
-- [x] Verify all mandatory acceptance criteria against Section 11 Definition of Done.
-- [x] Verify reproducible builds (`scripts/setup-toolchains.sh`, `scripts/build-wasm.sh`, `scripts/build-kernel.sh`, `scripts/build-busybox.sh`, `scripts/build-vanilla-rootfs.sh`, `scripts/build-debian-rootfs.sh`, `npm run build`).
-- [x] Verify clean installation (`npm ci` / clean build verification).
-- [x] Verify first boot (cold-start browser experience with zero prior OPFS/IDB state).
-- [x] Verify persistent storage (survival across reload and browser restart).
-- [x] Verify both Linux profiles (Vanilla Linux 7.3.1 + Debian 13.7 `"trixie"`).
-- [x] Verify browser compatibility (capability matrix + fallback paths verified).
-- [x] Verify offline startup (Service Worker / offline cached boot + offline Debian installed package usage).
-- [x] Document known limitations (`docs/ARCHITECTURE.md` & `README.md`).
-- [x] Produce final architecture documentation (`docs/ARCHITECTURE.md`, `docs/SECURITY.md`, `THIRD_PARTY_NOTICES.md`).
-- [x] Produce final testing documentation (`docs/TEST_REPORT.md` & `docs/BENCHMARKS.md`).
-- [x] Prepare the release (`README.md`, clean `git status`, logical commits on branch `arena/5741c179-wasmnux`, live preview server verified).
+- [x] WASM boundary validates every pointer/length pair; typed errors instead of traps
+  escaping to JS.
+- [x] Worker RPC payloads are schema-validated; malformed envelopes are rejected.
+- [x] Disk import rejects oversize, truncated, wrong-profile and traversal payloads.
+- [x] Storage identifiers are allowlisted (`^[a-z0-9_-]+$`); no host filesystem access.
+- [x] Corrupted snapshots and corrupted chunk envelopes are rejected, not applied.
+- [x] Interrupted OPFS writes are detected instead of silently truncating chunks.
+- [x] Crash recovery after simulated power loss mid-write (`tests/unit/storage-engine.test.ts`).
+- [x] Profile isolation: writes in one profile never appear in the other. `E-CI`
+- [x] `npm audit --audit-level=low` is part of CI. `E-CI`
+- [ ] No dependency or boundary fuzzing (no `cargo-fuzz`/`libFuzzer` target).
+- [ ] No third-party security review of `crates/wasmnux-riscv`.
+
+## Phase 11 — Comprehensive testing
+
+- [x] `cargo fmt --all -- --check`. `E-CI`
+- [x] `cargo check --workspace --all-targets`. `E-CI`
+- [x] `cargo clippy --workspace --all-targets --all-features -- -D warnings` (host). `E-CI`
+- [x] `cargo clippy --workspace --target wasm32-unknown-unknown --all-features -- -D warnings`. `E-CI`
+- [x] `cargo test --workspace` (19 Rust tests across 5 crates + mini-OS integration). `E-CI`
+- [x] `./scripts/build-wasm.sh`. `E-CI`
+- [x] Prettier, ESLint, `tsc --noEmit`. `E-CI`
+- [x] Vitest (13 files / 34 tests including asset manifest and OPFS integrity). `E-CI`
+- [x] Production Vite build. `E-CI`
+- [x] Playwright E2E (6 specs: foundation, vanilla, Debian, storage restart, WebGPU/Canvas2D,
+  browser interface). `E-CI`
+- [x] Kernel boot, BusyBox behaviour, Debian apt/dpkg, ext4 persistence reproduce outside
+  the browser via a headless harness driving the same `.wasm`. `E-BOOT-01` `E-BOOT-02` `E-BB` `E-DEB-02` `E-DEB-03` `E-PERS-01`
+- [x] Benchmarks are multi-trial medians rather than single samples (`tests/unit/benchmarks.test.ts`).
+- [ ] The benchmark suite is timing-sensitive; one unrelated CI run showed a transient
+  Vitest failure that did not reproduce. The thresholds have not been de-flaked formally.
+
+## Phase 12 — Release readiness
+
+- [x] Both profiles boot from a cold profile with no prior storage. `E-CI`
+- [x] Guest file state and Debian package state survive reload and browser restart. `E-CI` `E-DEB-03`
+- [x] Clean `git status`; assets and provenance documented. `E-ASSET`
+- [x] `TODO.MD` reconciled with real results; limitations recorded.
+- [ ] Snapshot restore/delete E2E, offline cold start, second browser engine, hardware
+  WebGPU, official Debian mirror access, and a from-source guest rebuild all remain open.
+  See the Phase 8, 6, 7 and 5 items above.
+
+---
+
+## Known limitations (summary)
+
+1. **No official Debian archive access.** apt is served by a bundled four-package
+   repository over the in-browser bridge; `deb.debian.org` is unreachable because there is
+   no TLS stack and no egress relay. This is the largest honest gap versus "Debian package
+   management".
+2. **No TLS anywhere in the guest network path.**
+3. **Single hart**, interpreter-only; ~30 MIPS, so the guest is usable but not fast.
+4. **Chromium only**; Firefox/Safari unverified.
+5. **Software WebGPU adapter** in CI; hardware adapters unverified.
+6. **No snapshot restore/delete through the UI, and no offline cold start.**
+7. **Guest assets are prebuilt**; the from-source pipeline is documented but not re-run.
