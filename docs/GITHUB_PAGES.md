@@ -13,6 +13,12 @@ Published site: `https://<owner>.github.io/WASMNux/` (a project sub-path).
 
 1. Open **Settings -> Pages**.
 2. Under **Build and deployment -> Source**, choose **GitHub Actions**.
+3. Re-run the **Deploy to GitHub Pages** workflow (Actions -> Deploy to GitHub Pages -> Run workflow),
+   or push any commit to `main`.
+
+This step is intentionally manual: creating a Pages site through the REST API requires repository
+admin rights that the workflow's `GITHUB_TOKEN` does not have, so `actions/configure-pages` cannot
+enable Pages for you (it fails with `HttpError: Resource not accessible by integration`).
 3. (Optional) Add a custom domain; the app works from any path prefix or hostname without config
    changes because all asset URLs are resolved relatively at runtime.
 
@@ -144,7 +150,8 @@ GitHub Pages cannot set response headers, so:
 
 | Symptom | Cause / fix |
 |---|---|
-| Workflow fails at **Configure GitHub Pages** with `Resource not accessible by integration` | Pages is not enabled or the account plan does not include Pages for private repositories. Enable **Settings -> Pages -> Source: GitHub Actions**, or make the repository public. |
+| Workflow fails at **Configure GitHub Pages** with `Resource not accessible by integration` (HTTP 403 on `POST /repos/{owner}/{repo}/pages`) | Pages is not enabled yet. Enable **Settings -> Pages -> Source: GitHub Actions**, then re-run the workflow. The workflow token cannot create the Pages site itself. |
+| **Settings -> Pages** shows that Pages is unavailable for this repository | GitHub Pages is not included for private repositories on GitHub Free; make the repository public or use a plan that includes Pages, then set the source to **GitHub Actions**. |
 | Deployment succeeds but the site 404s | Pages source is set to "Deploy from a branch" instead of "GitHub Actions", or the deployment ran on a branch that is not allowed by the `github-pages` environment protection rules. |
 | Blank page, console 404 on `assets/index-*.js` | A custom `base` was set in `vite.config.ts`. Keep `base: './'`; the runtime resolves sub-paths itself. |
 | `apt-get update` fails with `404` on `/debian-repo/...` | The mirror is served relative to the deployment root; confirm `dist/debian-repo/` exists and that the page URL ends with `/WASMNux/`. |
