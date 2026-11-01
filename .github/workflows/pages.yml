@@ -1,0 +1,76 @@
+name: Deploy to GitHub Pages
+
+# Builds the fully static WASMNux site (Rust -> WASM runtime + Vite bundle + guest images)
+# and publishes `dist/` to GitHub Pages on every push to `main`.
+#
+# One-time repository setup: Settings -> Pages -> "Build and deployment" -> Source: "GitHub Actions".
+# The workflow also exposes `workflow_dispatch` so a deployment can be triggered manually from any
+# branch once Pages is enabled.
+
+on:
+  push:
+    branches: ['main']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: 'pages'
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build static site
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Ensure Rust toolchain with wasm32 target
+        run: |
+          if ! command -v cargo >/dev/null 2>&1; then
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs |
+              sh -s -- -y --profile minimal --default-toolchain stable
+            echo "${HOME}/.cargo/bin" >> "${GITHUB_PATH}"
+            export PATH="${HOME}/.cargo/bin:${PATH}"
+          fi
+          rustup target add wasm32-unknown-unknown
+
+      - name: Install npm dependencies
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+        run: npm ci
+
+      - name: Build WASM runtime + static bundle
+        run: npm run build
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy Pages artifact
+        id: deployment
+        uses: actions/deploy-pages@v4

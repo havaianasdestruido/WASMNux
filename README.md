@@ -42,6 +42,23 @@ npm run preview
 
 ---
 
+## Deploying to GitHub Pages (Fully Static Hosting)
+
+WASMNux has no server-side component: the WASM runtime, the Linux kernel/initramfs/rootfs images, and the `/debian-repo/` APT mirror are all plain files, so GitHub Pages can host the whole machine.
+
+1. **Enable Pages once** — repository **Settings -> Pages -> Build and deployment -> Source: `GitHub Actions`**.
+   Pages requires a public repository on GitHub Free; private repositories need a plan that includes Pages.
+2. **Publish** — push to `main` (or run the **Deploy to GitHub Pages** workflow manually from the Actions tab). [`.github/workflows/pages.yml`](./.github/workflows/pages.yml) compiles `public/wasm/wasmnux_wasm.wasm` from Rust, runs the strict TypeScript typecheck, bundles with Vite, and publishes `dist/` through `actions/upload-pages-artifact` + `actions/deploy-pages`.
+3. **Open** `https://<owner>.github.io/WASMNux/` — the project site is served from a sub-path, which the app supports natively:
+
+   - `src/runtime/asset-url.ts` resolves the WASM runtime, kernel, initramfs, and ext4 base disks against the **application base URL** (`document.baseURI` + Vite `import.meta.env.BASE_URL`) instead of the origin root.
+   - The dedicated Worker forwards that base URL to the guest `VirtIO-Net` HTTP bridge (`src/net/network-bridge.ts` `basePath`), so `apt-get update` / `apt-get install` resolve to `.../WASMNux/debian-repo/...`.
+   - `public/sw.js` derives its shell URLs and cache name from its own registration scope, keeping the offline PWA working under any prefix.
+
+GitHub Pages cannot emit custom `Cross-Origin-Opener-Policy` / `Cross-Origin-Embedder-Policy` headers; WASMNux detects the missing isolation (`crossOriginIsolated === false`) and uses its structured-clone Worker transport, so Linux still cold-boots (see limitations below). Full setup, local sub-path preview, and troubleshooting notes: [`docs/GITHUB_PAGES.md`](./docs/GITHUB_PAGES.md).
+
+---
+
 ## Verification & Benchmarks
 
 ```bash
@@ -113,4 +130,5 @@ All artifacts in `public/wasm/`, `public/images/`, and `public/debian-repo/` are
 - [`docs/SECURITY.md`](./docs/SECURITY.md) — Browser/WASM/Worker/OPFS/import/network threat model & security boundaries.
 - [`docs/BENCHMARKS.md`](./docs/BENCHMARKS.md) — Reproducible cold-boot, MIPS, block I/O, RTT, and snapshot benchmarks.
 - [`docs/TEST_REPORT.md`](./docs/TEST_REPORT.md) — Full Phase 0–12 automated test evidence ledger.
+- [`docs/GITHUB_PAGES.md`](./docs/GITHUB_PAGES.md) — Static deployment to GitHub Pages, sub-path asset resolution, and local verification.
 - [`THIRD_PARTY_NOTICES.md`](./THIRD_PARTY_NOTICES.md) & [`LICENSE`](./LICENSE) — Apache-2.0 license & upstream attributions.

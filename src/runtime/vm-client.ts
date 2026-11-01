@@ -28,6 +28,8 @@ export interface VmClientListeners {
 
 export interface InitVmParams {
   readonly wasmUrl: string;
+  /** Absolute URL of the published application root (for sub-path deployments). */
+  readonly appBaseUrl?: string;
   readonly profileId: string;
   readonly ramMib: number;
   readonly diskMib: number;
@@ -95,6 +97,7 @@ export class VmClient {
       type: 'init_vm',
       reqId,
       wasmUrl: params.wasmUrl,
+      appBaseUrl: params.appBaseUrl,
       profileId: params.profileId,
       ramMib: params.ramMib,
       diskMib: params.diskMib,
