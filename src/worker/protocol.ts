@@ -21,6 +21,8 @@ export type WorkerCommand =
       readonly type: 'init_vm';
       readonly reqId: number;
       readonly wasmUrl: string;
+      /** Absolute URL of the published application root (used for same-origin mirror URLs). */
+      readonly appBaseUrl?: string;
       readonly profileId: string;
       readonly ramMib: number;
       readonly diskMib: number;
@@ -158,6 +160,7 @@ export function isWorkerCommand(value: unknown): value is WorkerCommand {
     case 'init_vm':
       return (
         typeof value['wasmUrl'] === 'string' &&
+        (value['appBaseUrl'] === undefined || typeof value['appBaseUrl'] === 'string') &&
         typeof value['profileId'] === 'string' &&
         typeof value['ramMib'] === 'number' &&
         typeof value['diskMib'] === 'number' &&

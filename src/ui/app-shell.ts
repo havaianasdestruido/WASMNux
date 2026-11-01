@@ -28,6 +28,8 @@ import {
 export interface AppShellBootstrapData {
   readonly abiVersion: number;
   readonly wasmUrl: string;
+  /** Absolute URL of the published application root (sub-path deployments). */
+  readonly appBaseUrl?: string;
   readonly capabilities: BrowserCapabilities;
   readonly workerSmoke: {
     readonly transportMode: string;
@@ -143,6 +145,7 @@ export class AppShell {
     this.orchestrator = new BootOrchestrator({
       storage: this.storage,
       wasmUrl: this.bootData.wasmUrl,
+      appBaseUrl: this.bootData.appBaseUrl,
       events: {
         onBootProgress: (ev) => {
           this.bootStatusLineEl.textContent = `[${String(Math.round(ev.elapsedMs))} ms] ${ev.detail}`;

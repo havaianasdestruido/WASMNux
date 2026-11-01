@@ -3,6 +3,7 @@
  */
 
 import { executeBridgedHttpRequest } from '../net/network-bridge';
+import { normalizeBasePath, splitAppBaseUrl } from '../runtime/asset-url';
 import {
   VmRuntimeError,
   WasmVmRuntime,
@@ -27,6 +28,7 @@ export class VmEngineHost {
   private lastTelemetryAt = 0;
   private lastDiskFlushAt = 0;
   private networkEnabled = true;
+  private appBaseUrl: string | null = null;
 
   public constructor(emit: MessageSink) {
     this.emit = emit;
@@ -74,6 +76,7 @@ export class VmEngineHost {
           vm.setDiskQuotaChunks(cmd.maxOverlayChunks);
           vm.setDiskReadOnly(cmd.readOnly);
           this.networkEnabled = cmd.networkEnabled;
+          this.appBaseUrl = cmd.appBaseUrl ?? null;
           vm.setNetworkEnabled(cmd.networkEnabled);
 
           this.session = vm;
@@ -314,9 +317,28 @@ export class VmEngineHost {
     }
   }
 
+  /**
+   * Resolve the published application origin + sub-path used for guest mirror requests.
+   *
+   * `appBaseUrl` is supplied by the main thread (`BootOrchestrator`) because a module Worker's
+   * own `location` points at its bundled `assets/*.js` chunk rather than the app root on
+   * sub-path deployments such as GitHub Pages project sites.
+   */
+  private resolveMirrorLocation(): { readonly origin?: string; readonly basePath?: string } {
+    const parts = this.appBaseUrl === null ? null : splitAppBaseUrl(this.appBaseUrl);
+    if (parts === null) {
+      return {};
+    }
+    return {
+      origin: parts.origin,
+      basePath: normalizeBasePath(parts.basePath),
+    };
+  }
+
   private async dispatchBridgedHttp(vm: WasmVmSession, req: BridgeHttpRequestMsg): Promise<void> {
     const response = await executeBridgedHttpRequest(req, {
       networkEnabled: this.networkEnabled,
+      ...this.resolveMirrorLocation(),
     });
     if (!vm.isDestroyed) {
       vm.completeHttpResponse(response);

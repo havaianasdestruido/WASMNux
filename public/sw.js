@@ -1,19 +1,30 @@
 /*
- * WASMNux PWA Service Worker (`wasmnux-static-v1`).
+ * WASMNux PWA Service Worker (`wasmnux-static-v2`).
  *
  * Strictly caches immutable/static application shell, WASM runtime, kernel/rootfs base images,
- * and local `/debian-repo/` APT packages for offline boot & install capability.
+ * and local `<deployment-root>/debian-repo/` APT packages for offline boot & install capability.
  * Guest persistent virtual disks live exclusively in OPFS + IndexedDB and are NEVER stored in
  * or cleared by Cache Storage.
+ *
+ * All URLs are derived from the Service Worker scope so the same script works when the site is
+ * hosted at the domain root (`/`) or under a sub-path such as a GitHub Pages project site
+ * (`/WASMNux/`).
  */
 
-const STATIC_CACHE = 'wasmnux-static-v1';
+const STATIC_CACHE = 'wasmnux-static-v2';
+
+// App root derived from the worker script location, always with a trailing slash:
+// `https://host/` -> `/`, `https://host/WASMNux/sw.js` -> `/WASMNux/`.
+const APP_ROOT = `${new URL('./', self.location.href).pathname.replace(/\/+$/, '')}/`;
+
 const CORE_SHELL_URLS = [
-  './',
-  './manifest.webmanifest',
-  './icon.svg',
-  './wasm/wasmnux_wasm.wasm',
+  APP_ROOT,
+  `${APP_ROOT}manifest.webmanifest`,
+  `${APP_ROOT}icon.svg`,
+  `${APP_ROOT}wasm/wasmnux_wasm.wasm`,
 ];
+
+const GUEST_ASSET_PREFIXES = ['wasm/', 'images/', 'debian-repo/'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -49,10 +60,9 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  const isImmutableGuestAsset =
-    url.pathname.startsWith('/wasm/') ||
-    url.pathname.startsWith('/images/') ||
-    url.pathname.startsWith('/debian-repo/');
+  const isImmutableGuestAsset = GUEST_ASSET_PREFIXES.some((prefix) =>
+    url.pathname.startsWith(`${APP_ROOT}${prefix}`),
+  );
 
   if (isImmutableGuestAsset) {
     event.respondWith(

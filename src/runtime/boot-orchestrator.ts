@@ -7,6 +7,7 @@ import type { ProfileManifestRecord } from '../storage/idb-backend';
 import type { PersistentStorageEngine } from '../storage/storage-engine';
 import type { DirtyDiskChunk } from '../wasm/bindings';
 import type { BaseChunkInput } from '../worker/protocol';
+import { resolveAppBaseUrl, resolveAssetUrl } from './asset-url';
 import {
   decompressGzipIfNeeded,
   extractNonZeroBaseChunks,
@@ -32,6 +33,12 @@ export interface BootProgressEvent {
 export interface BootOrchestratorOptions {
   readonly storage: PersistentStorageEngine;
   readonly wasmUrl?: string;
+  /**
+   * Absolute URL of the published application root (`.../`). Defaults to the Vite base URL
+   * resolved against the current document, which keeps kernel/initramfs/rootfs/`debian-repo`
+   * fetches working when the site is hosted under a sub-path (GitHub Pages project sites).
+   */
+  readonly appBaseUrl?: string;
   readonly events?: VmClientListeners & {
     readonly onBootProgress?: (ev: BootProgressEvent) => void;
     readonly onDiskCommitted?: (manifest: ProfileManifestRecord) => void;
@@ -49,6 +56,7 @@ interface CachedBaseAssets {
 export class BootOrchestrator {
   public readonly storage: PersistentStorageEngine;
   private readonly wasmUrl: string;
+  private readonly appBaseUrl: string;
   private readonly events: BootOrchestratorOptions['events'];
   private readonly fetchAsset: (url: string) => Promise<Uint8Array>;
   private readonly baseAssetCache = new Map<LinuxProfileId, CachedBaseAssets>();
@@ -60,7 +68,8 @@ export class BootOrchestrator {
 
   public constructor(opts: BootOrchestratorOptions) {
     this.storage = opts.storage;
-    this.wasmUrl = opts.wasmUrl ?? '/wasm/wasmnux_wasm.wasm';
+    this.appBaseUrl = opts.appBaseUrl ?? resolveAppBaseUrl();
+    this.wasmUrl = opts.wasmUrl ?? resolveAssetUrl('/wasm/wasmnux_wasm.wasm', this.appBaseUrl);
     this.events = opts.events;
     this.fetchAsset =
       opts.assetFetcher ??
@@ -71,6 +80,13 @@ export class BootOrchestrator {
         }
         return new Uint8Array(await resp.arrayBuffer());
       });
+  }
+
+  /**
+   * Resolve a profile asset path against the published application base URL.
+   */
+  private profileAssetUrl(path: string): string {
+    return resolveAssetUrl(path, this.appBaseUrl);
   }
 
   public get activeProfileId(): LinuxProfileId | null {
@@ -103,18 +119,18 @@ export class BootOrchestrator {
     let assets = this.baseAssetCache.get(profile.id);
     if (!assets) {
       this.reportProgress(t0, 'loading_kernel', `Loading Linux ${profile.kernelVersion} kernel...`);
-      const kernelGz = await this.fetchAsset(profile.kernelUrl);
+      const kernelGz = await this.fetchAsset(this.profileAssetUrl(profile.kernelUrl));
       const kernel = await decompressGzipIfNeeded(kernelGz);
 
       let initrd = new Uint8Array(0);
       if (profile.initrdUrl.length > 0) {
         this.reportProgress(t0, 'loading_initrd', `Loading ${profile.name} initramfs...`);
-        const initrdGz = await this.fetchAsset(profile.initrdUrl);
+        const initrdGz = await this.fetchAsset(this.profileAssetUrl(profile.initrdUrl));
         initrd = await decompressGzipIfNeeded(initrdGz);
       }
 
       this.reportProgress(t0, 'loading_base_disk', `Preparing ${profile.name} ext4 disk...`);
-      const diskGz = await this.fetchAsset(profile.baseDiskUrl);
+      const diskGz = await this.fetchAsset(this.profileAssetUrl(profile.baseDiskUrl));
       const rawDisk = await decompressGzipIfNeeded(diskGz);
       const baseChunks = extractNonZeroBaseChunks(rawDisk);
 
@@ -138,6 +154,7 @@ export class BootOrchestrator {
 
     await client.initVm({
       wasmUrl: this.wasmUrl,
+      appBaseUrl: this.appBaseUrl,
       profileId: profile.id,
       ramMib: overrides?.ramMib ?? profile.defaultRamMib,
       diskMib: profile.diskMib,

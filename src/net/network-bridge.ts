@@ -13,6 +13,7 @@
  *   for offline or CORS-blocked external endpoints.
  */
 
+import { normalizeBasePath } from '../runtime/asset-url';
 import type { BridgeHttpRequestMsg, BridgeHttpResponseMsg } from '../wasm/bindings';
 
 export const MAX_BRIDGED_RESPONSE_BYTES = 64 * 1024 * 1024;
@@ -20,6 +21,12 @@ export const MAX_BRIDGED_RESPONSE_BYTES = 64 * 1024 * 1024;
 export interface NetworkBridgeOptions {
   readonly networkEnabled: boolean;
   readonly origin?: string;
+  /**
+   * Sub-path the static application is published under (for example `/WASMNux` on a GitHub
+   * Pages project site). Same-origin mirror requests are prefixed with it so the guest can
+   * still `apt-get` from `<origin><basePath>/debian-repo/`.
+   */
+  readonly basePath?: string;
   readonly fetchImpl?: typeof fetch;
   readonly timeoutMs?: number;
 }
@@ -127,6 +134,7 @@ export function sanitizeRequestPath(rawPath: string): string | null {
 export function resolveBridgeTarget(
   req: Pick<BridgeHttpRequestMsg, 'host' | 'path'>,
   origin: string,
+  basePath = '',
 ): ResolvedBridgeTarget {
   const safePath = sanitizeRequestPath(req.path);
   if (safePath === null) {
@@ -140,9 +148,10 @@ export function resolveBridgeTarget(
   const hostOnly = extractHostname(req.host);
   if (LOCAL_MIRROR_HOSTS.has(hostOnly)) {
     const cleanOrigin = origin.endsWith('/') ? origin.slice(0, -1) : origin;
+    const cleanBasePath = normalizeBasePath(basePath);
     return {
       kind: 'local-mirror',
-      url: `${cleanOrigin}${safePath}`,
+      url: `${cleanOrigin}${cleanBasePath}${safePath}`,
     };
   }
 
@@ -204,7 +213,7 @@ export async function executeBridgedHttpRequest(
       ? globalThis.location.origin
       : 'http://localhost';
   const origin = options.origin ?? defaultOrigin;
-  const resolved = resolveBridgeTarget(req, origin);
+  const resolved = resolveBridgeTarget(req, origin, options.basePath ?? '');
 
   if (resolved.kind === 'blocked') {
     return makeTextErrorResponse(

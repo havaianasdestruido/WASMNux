@@ -1,6 +1,7 @@
 import './styles.css';
 
 import { FramebufferDisplayController } from './gpu/display-controller';
+import { resolveAppBaseUrl, resolveAssetUrl } from './runtime/asset-url';
 import { BootOrchestrator } from './runtime/boot-orchestrator';
 import { detectBrowserCapabilities } from './runtime/capabilities';
 import { VmClient } from './runtime/vm-client';
@@ -94,10 +95,13 @@ async function runWorkerSmokeCheck(wasmUrl: string): Promise<{
   }
 }
 
-function registerPwaServiceWorker(): void {
+function registerPwaServiceWorker(appBaseUrl: string): void {
   if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
     window.addEventListener('load', () => {
-      void navigator.serviceWorker.register('./sw.js').catch(() => {
+      // Resolve against the published app root so the worker + its scope stay inside the
+      // deployment sub-path (e.g. `https://<user>.github.io/WASMNux/`).
+      const swUrl = resolveAssetUrl('sw.js', appBaseUrl);
+      void navigator.serviceWorker.register(swUrl).catch(() => {
         // Ignore ServiceWorker registration failure in restricted/file contexts
       });
     });
@@ -110,9 +114,10 @@ async function bootstrap(): Promise<void> {
     return;
   }
 
-  registerPwaServiceWorker();
+  const appBaseUrl = resolveAppBaseUrl();
+  registerPwaServiceWorker(appBaseUrl);
   const caps = await detectBrowserCapabilities();
-  const wasmUrl = new URL('./wasm/wasmnux_wasm.wasm', window.location.href).href;
+  const wasmUrl = resolveAssetUrl('wasm/wasmnux_wasm.wasm', appBaseUrl);
   const rt = await WasmVmRuntime.fromUrl(wasmUrl);
   const abiVersion = rt.abiVersion;
   const workerSmoke = await runWorkerSmokeCheck(wasmUrl);
@@ -120,6 +125,7 @@ async function bootstrap(): Promise<void> {
   const shell = new AppShell(root, {
     abiVersion,
     wasmUrl,
+    appBaseUrl,
     capabilities: caps,
     workerSmoke,
   });
