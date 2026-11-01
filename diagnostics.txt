@@ -1,0 +1,90 @@
+### /tmp/wasmnux-cargo-fmt.log (full)
+### /tmp/wasmnux-cargo-check.log
+### /tmp/wasmnux-cargo-clippy.log
+### /tmp/wasmnux-cargo-test.log
+10:test tests::internet_checksum_verifies_rfc1071_vector ... ok
+11:test tests::resolves_dns_and_streams_multi_segment_tcp_http_response ... ok
+12:test tests::responds_to_arp_and_icmp_echo_for_gateway ... ok
+13-
+14:test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+15-
+16-     Running unittests src/lib.rs (target/debug/deps/wasmnux_riscv-4401b300ca42795e)
+17-
+18-running 9 tests
+19:test tests::checked_offset_rejects_overflow_and_out_of_bounds ... ok
+20:test tests::executes_rv64imafdc_and_zba_zbb_instructions ... ok
+21:test tests::fcvt_l_d_and_fcvt_d_lu_saturate ... ok
+22:test tests::malformed_kernel_images_are_rejected ... ok
+23:test tests::rv64m_div_rem_zero_and_overflow_semantics_match_isa_spec ... ok
+24:test tests::sv39_enforces_pte_u_sum_smep_and_cow_dirty_bit ... ok
+25:test tests::unaligned_guest_access_is_byte_accurate_and_bounds_checked ... ok
+26:test tests::user_mode_cannot_access_supervisor_csrs_or_sret ... ok
+27:test tests::peripherals_fdt_sbi_and_snapshot_roundtrip ... ok
+28-
+29:test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
+30-
+31-     Running unittests src/lib.rs (target/debug/deps/wasmnux_storage-7acd31188e8ea124)
+32-
+33-running 5 tests
+34:test tests::crc32_matches_standard_check_value ... ok
+35:test tests::enforces_bounds_readonly_and_atomic_quota_limits ... ok
+36:test tests::identifier_validation_blocks_traversal_and_special_chars ... ok
+37:test tests::sparse_cow_reads_writes_across_chunk_boundaries_and_tracks_dirty ... ok
+38:test tests::snapshot_export_and_tamper_resistant_import_work ... ok
+39-
+40:test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+41-
+42-     Running unittests src/lib.rs (target/debug/deps/wasmnux_virtio-c09e8736ae829839)
+43-
+44-running 2 tests
+45:test tests::virtio_blk_mmio_write_and_read_roundtrip_with_irq ... ok
+46:test tests::virtio_net_mmio_arp_roundtrip_and_virtio_rng_entropy ... ok
+47-
+48:test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+49-
+50-     Running tests/mini_os_boot.rs (target/debug/deps/mini_os_boot-17dc84931225d80f)
+51-
+52-running 1 test
+53:test boots_rv64_smode_mini_os_through_mmu_irq_uart_fb_virtio_blk_and_poweroff ... ok
+54-
+55:test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+56-
+57-     Running unittests src/lib.rs (target/debug/deps/wasmnux_wasm-85a590ac466395b1)
+58-
+59-running 2 tests
+60:test tests::abi_version_is_nonzero ... ok
+61:test tests::wasm_abi_lifecycle_boot_uart_snapshot_and_error_bounds ... ok
+62-
+63:test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.13s
+64-
+65-   Doc-tests wasmnux_net
+66-
+67-running 0 tests
+68-
+69:test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+70-
+71-   Doc-tests wasmnux_riscv
+72-
+73-running 0 tests
+74-
+75:test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+76-
+77-   Doc-tests wasmnux_storage
+78-
+79-running 0 tests
+80-
+81:test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+82-
+83-   Doc-tests wasmnux_virtio
+84-
+85-running 0 tests
+86-
+87:test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+88-
+89-   Doc-tests wasmnux_wasm
+90-
+91-running 0 tests
+92-
+93:test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+94-
+### /tmp/wasmnux-wasm-build.log
