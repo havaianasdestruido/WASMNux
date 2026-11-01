@@ -9,10 +9,26 @@ UNPACK_DIR="${TOOLS_DIR}/unpack"
 
 mkdir -p "${RUST_DIR}" "${LLVM_DIR}" "${DL_DIR}" "${UNPACK_DIR}"
 
+# `rustc --print target-libdir --target wasm32-unknown-unknown` prints a path even when
+# the target's `std` is absent, so it cannot be used to decide whether the target is
+# usable. Compile a `std`-using program instead; that only succeeds when it really is.
+wasm_std_available() {
+  local probe
+  probe="$(mktemp -d)"
+  printf 'fn main() { println!("ok"); }\n' > "${probe}/probe.rs"
+  if rustc --target wasm32-unknown-unknown --emit=metadata \
+       -o "${probe}/probe.metadata" "${probe}/probe.rs" >/dev/null 2>&1; then
+    rm -rf "${probe}"
+    return 0
+  fi
+  rm -rf "${probe}"
+  return 1
+}
+
 if command -v rustup >/dev/null 2>&1 && command -v rustc >/dev/null 2>&1; then
   echo "[setup-toolchains] Ensuring wasm32-unknown-unknown + rustfmt + clippy via rustup..."
   rustup target add wasm32-unknown-unknown
-  rustup component add rustfmt clippy
+  rustup component add rustfmt clippy || true
 elif ! command -v rustc >/dev/null 2>&1 || ! rustc --print target-libdir --target wasm32-unknown-unknown >/dev/null 2>&1; then
   echo "[setup-toolchains] Installing Rust 1.88.0 + wasm32-unknown-unknown + rustfmt + clippy + llvm-tools..."
   pushd "${DL_DIR}" >/dev/null
@@ -75,3 +91,11 @@ echo "  clippy:  $(cargo clippy --version)"
 echo "  clang:   $(clang --version | head -n 1)"
 echo "  lld:     $(ld.lld --version)"
 echo "  zig:     $(zig version)"
+
+if wasm_std_available; then
+  echo "  wasm32:  usable (std probes compile)"
+else
+  echo "[setup-toolchains] ERROR: rustc cannot compile for wasm32-unknown-unknown." >&2
+  echo "  rustc: $(command -v rustc) ($(rustc --version 2>/dev/null || echo unknown))" >&2
+  exit 1
+fi

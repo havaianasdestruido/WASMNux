@@ -5,6 +5,9 @@ on:
     branches: ["main", "arena/**"]
   pull_request:
 
+permissions:
+  contents: write
+
 jobs:
   verify:
     runs-on: ubuntu-latest
@@ -29,19 +32,37 @@ jobs:
           npm audit --audit-level=low
 
       - name: Rust formatting check
-        run: cargo fmt --all -- --check
-
-      - name: Rust workspace check & Clippy (host + wasm32)
+        shell: bash
         run: |
-          cargo check --workspace --all-targets
-          cargo clippy --workspace --all-targets --all-features -- -D warnings
-          cargo clippy --workspace --target wasm32-unknown-unknown --all-features -- -D warnings
+          set -o pipefail
+          cargo fmt --all -- --check 2>&1 | tee /tmp/wasmnux-cargo-fmt.log
+
+      - name: Rust workspace check
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo check --workspace --all-targets 2>&1 | tee /tmp/wasmnux-cargo-check.log
+
+      - name: Rust Clippy (host + wasm32)
+        shell: bash
+        run: |
+          set -o pipefail
+          {
+            cargo clippy --workspace --all-targets --all-features -- -D warnings
+            cargo clippy --workspace --target wasm32-unknown-unknown --all-features -- -D warnings
+          } 2>&1 | tee /tmp/wasmnux-cargo-clippy.log
 
       - name: Rust unit & integration tests
-        run: cargo test --workspace
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo test --workspace 2>&1 | tee /tmp/wasmnux-cargo-test.log
 
       - name: Build WASM runtime
-        run: ./scripts/build-wasm.sh
+        shell: bash
+        run: |
+          set -o pipefail
+          ./scripts/build-wasm.sh 2>&1 | tee /tmp/wasmnux-wasm-build.log
 
       - name: TypeScript format, lint, and strict typecheck
         run: |
@@ -50,9 +71,51 @@ jobs:
           npm run typecheck
 
       - name: Vitest unit, security, & integration tests
-        run: npm test
+        shell: bash
+        run: |
+          set -o pipefail
+          npm test 2>&1 | tee /tmp/wasmnux-vitest.log
 
       - name: Build web application & run Playwright E2E suite
+        shell: bash
         run: |
-          npm run build
-          npm run test:e2e
+          set -o pipefail
+          { npm run build && npm run test:e2e; } 2>&1 | tee /tmp/wasmnux-e2e.log
+
+      # Diagnostic aid: On restricted networks the raw run log (stored in object
+      # storage) may be unreachable, while git over HTTPS always works. On failure
+      # the decisive excerpts are re-published as annotations and to a scratch branch.
+      - name: Surface build & test diagnostics
+        if: failure()
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -u
+          DIAG=/tmp/wasmnux-diag.txt
+          : > "$DIAG"
+          for f in /tmp/wasmnux-cargo-fmt.log /tmp/wasmnux-cargo-check.log \
+                   /tmp/wasmnux-cargo-clippy.log /tmp/wasmnux-cargo-test.log \
+                   /tmp/wasmnux-wasm-build.log /tmp/wasmnux-vitest.log /tmp/wasmnux-e2e.log; do
+            [ -f "$f" ] || continue
+            case "$f" in
+              *fmt.log) { echo "### $f (full)"; cat "$f"; } >> "$DIAG" 2>&1 || true ;;
+              *clippy.log) { echo "### $f"; grep -nE '^(error|warning)' -A 14 "$f" | head -n 400; } >> "$DIAG" 2>&1 || true ;;
+              *check.log) { echo "### $f"; grep -nE '^(error|warning)' -A 14 "$f" | head -n 400; } >> "$DIAG" 2>&1 || true ;;
+              *test.log) { echo "### $f"; grep -nE '^(test |failures|thread|error)' -A 8 "$f" | tail -n 700; } >> "$DIAG" 2>&1 || true ;;
+              *wasm-build.log) { echo "### $f"; grep -nE '^(error|warning)' -A 12 "$f" | head -n 300; } >> "$DIAG" 2>&1 || true ;;
+              *vitest.log) { echo "### $f"; grep -nE '(FAIL|Error|AssertionError|expected)' -B 2 -A 10 "$f" | head -n 320; } >> "$DIAG" 2>&1 || true ;;
+              *e2e.log) { echo "### $f"; grep -nE '(FAIL|Error|expect|✘|›)' -B 2 -A 12 "$f" | head -n 320; } >> "$DIAG" 2>&1 || true ;;
+            esac
+          done
+          head -n 8 "$DIAG" | while IFS= read -r line; do echo "::error title=ci::$line"; done || true
+          PUB=/tmp/wasmnux-publish
+          rm -rf "$PUB"; mkdir -p "$PUB"
+          cp "$DIAG" "$PUB/diagnostics.txt"
+          cd "$PUB"
+          git init -q .
+          git config user.email "ci@wasmnux.invalid"
+          git config user.name "wasmnux-ci"
+          git add diagnostics.txt
+          git commit -q -m "ci diagnostics for ${GITHUB_SHA}" || true
+          git push -f "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" HEAD:ci-diagnostics

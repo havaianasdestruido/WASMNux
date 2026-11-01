@@ -729,4 +729,62 @@ mod tests {
         assert_eq!(vm.hart.regs[7], (-7i64) as u64);
         assert_eq!(vm.hart.regs[9], (-5i64) as u64);
     }
+    /// Executes a single hand-assembled instruction at `pc` and returns the hart to it.
+    fn exec_one(vm: &mut RiscvMachine, pc: u64, word: u32) -> StepOutcome {
+        write_prog(vm, pc, &[word]);
+        vm.hart.pc = pc;
+        let (steps, outcome) = vm.step_slice(1);
+        assert_eq!(steps, 1, "exactly one instruction should retire");
+        outcome
+    }
+
+    /// `FCVT.L.D` and `FCVT.D.LU` (and `FCVT.LU.D`) are the RV64 conversion instructions a
+    /// hard-float `lp64d` userspace relies on. RISC-V saturates out-of-range conversions
+    /// rather than trapping, which is what these assertions pin down.
+    #[test]
+    fn fcvt_l_d_and_fcvt_d_lu_saturate() {
+        let base = GUEST_RAM_BASE;
+        const FCVT_L_D_RTZ: u32 = 0xC223_94D3; // fcvt.l.d  x9, f7, rtz
+        const FCVT_LU_D_RTZ: u32 = 0xC233_94D3; // fcvt.lu.d x9, f7, rtz
+        const FCVT_D_LU_RNE: u32 = 0xD233_03D3; // fcvt.d.lu f7, x6, rne
+
+        let mut vm = RiscvMachine::new(16 * 1024 * 1024, 0);
+
+        // u64::MAX -> double rounds to exactly 2^64.
+        vm.hart.regs[6] = u64::MAX;
+        let _ = exec_one(&mut vm, base, FCVT_D_LU_RNE);
+        assert_eq!(
+            f64::from_bits(vm.hart.fregs[7]),
+            18_446_744_073_709_551_616.0
+        );
+
+        // 2^64 cannot be represented in i64 -> saturates to i64::MAX.
+        let _ = exec_one(&mut vm, base, FCVT_L_D_RTZ);
+        assert_eq!(vm.hart.regs[9], i64::MAX as u64);
+
+        // 2^64 cannot be represented in u64 either (it is the exclusive upper bound).
+        let _ = exec_one(&mut vm, base, FCVT_LU_D_RTZ);
+        assert_eq!(vm.hart.regs[9], u64::MAX);
+
+        // NaN -> i64::MAX (positive saturation), +inf -> i64::MAX, -inf -> i64::MIN.
+        vm.hart.fregs[7] = 0x7FF8_0000_0000_0000;
+        let _ = exec_one(&mut vm, base, FCVT_L_D_RTZ);
+        assert_eq!(vm.hart.regs[9], i64::MAX as u64);
+        vm.hart.fregs[7] = f64::INFINITY.to_bits();
+        let _ = exec_one(&mut vm, base, FCVT_L_D_RTZ);
+        assert_eq!(vm.hart.regs[9], i64::MAX as u64);
+        vm.hart.fregs[7] = f64::NEG_INFINITY.to_bits();
+        let _ = exec_one(&mut vm, base, FCVT_L_D_RTZ);
+        assert_eq!(vm.hart.regs[9], i64::MIN as u64);
+
+        // Round-toward-zero truncates instead of rounding.
+        vm.hart.fregs[7] = (-3.75f64).to_bits();
+        let _ = exec_one(&mut vm, base, FCVT_L_D_RTZ);
+        assert_eq!(vm.hart.regs[9] as i64, -3);
+
+        // Negative input saturates to 0 for the unsigned conversion.
+        vm.hart.fregs[7] = (-1.5f64).to_bits();
+        let _ = exec_one(&mut vm, base, FCVT_LU_D_RTZ);
+        assert_eq!(vm.hart.regs[9], 0);
+    }
 }
