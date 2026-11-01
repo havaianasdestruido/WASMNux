@@ -65,10 +65,10 @@ jobs:
           ./scripts/build-wasm.sh 2>&1 | tee /tmp/wasmnux-wasm-build.log
 
       - name: TypeScript format, lint, and strict typecheck
+        shell: bash
         run: |
-          npm run format:check
-          npm run lint
-          npm run typecheck
+          set -o pipefail
+          { npm run format:check && npm run lint && npm run typecheck; } 2>&1 | tee /tmp/wasmnux-ts.log
 
       - name: Vitest unit, security, & integration tests
         shell: bash
@@ -96,7 +96,7 @@ jobs:
           : > "$DIAG"
           for f in /tmp/wasmnux-cargo-fmt.log /tmp/wasmnux-cargo-check.log \
                    /tmp/wasmnux-cargo-clippy.log /tmp/wasmnux-cargo-test.log \
-                   /tmp/wasmnux-wasm-build.log /tmp/wasmnux-vitest.log /tmp/wasmnux-e2e.log; do
+                   /tmp/wasmnux-wasm-build.log /tmp/wasmnux-ts.log /tmp/wasmnux-vitest.log /tmp/wasmnux-e2e.log; do
             [ -f "$f" ] || continue
             case "$f" in
               *fmt.log) { echo "### $f (full)"; cat "$f"; } >> "$DIAG" 2>&1 || true ;;
@@ -104,6 +104,7 @@ jobs:
               *check.log) { echo "### $f"; grep -nE '^(error|warning)' -A 14 "$f" | head -n 400; } >> "$DIAG" 2>&1 || true ;;
               *test.log) { echo "### $f"; grep -nE '^(test |failures|thread|error)' -A 8 "$f" | tail -n 700; } >> "$DIAG" 2>&1 || true ;;
               *wasm-build.log) { echo "### $f"; grep -nE '^(error|warning)' -A 12 "$f" | head -n 300; } >> "$DIAG" 2>&1 || true ;;
+              *ts.log) { echo "### $f"; head -n 60 "$f"; } >> "$DIAG" 2>&1 || true ;;
               *vitest.log) { echo "### $f"; grep -nE '(FAIL|Error|AssertionError|expected)' -B 2 -A 10 "$f" | head -n 320; } >> "$DIAG" 2>&1 || true ;;
               *e2e.log) { echo "### $f"; grep -nE '(FAIL|Error|expect|✘|›)' -B 2 -A 12 "$f" | head -n 320; } >> "$DIAG" 2>&1 || true ;;
             esac

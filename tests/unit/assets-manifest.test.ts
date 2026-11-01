@@ -43,9 +43,10 @@ describe('guest asset manifest', () => {
       const bytes = readFileSync(join(ROOT, 'public', relativePath));
       const entry = manifest.assets[relativePath as keyof typeof manifest.assets];
       expect(bytes.length, `size drift for ${relativePath}`).toBe(entry.bytes);
-      expect(createHash('sha256').update(bytes).digest('hex'), `hash drift for ${relativePath}`).toBe(
-        entry.sha256,
-      );
+      expect(
+        createHash('sha256').update(bytes).digest('hex'),
+        `hash drift for ${relativePath}`,
+      ).toBe(entry.sha256);
     }
   });
 });
