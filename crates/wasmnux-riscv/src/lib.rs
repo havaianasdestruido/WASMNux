@@ -342,6 +342,7 @@ impl RiscvMachine {
 mod tests {
     use super::*;
     use crate::csr::{CSR_SATP, CSR_SCAUSE, CSR_SEPC, CSR_SSTATUS, CSR_STVEC, SSTATUS_SUM};
+    use crate::boot::RISCV_IMAGE_MAGIC2;
     use crate::fdt::FDT_MAGIC;
     use crate::trap::{AccessType, PrivMode, Trap};
 
@@ -786,5 +787,116 @@ mod tests {
         vm.hart.fregs[7] = (-1.5f64).to_bits();
         let _ = exec_one(&mut vm, base, FCVT_LU_D_RTZ);
         assert_eq!(vm.hart.regs[9], 0);
+    }
+    /// Guest RAM assembles values byte-by-byte, so unaligned accesses must be exact
+    /// (no alignment fault, no host undefined behaviour) and must stay bounds-checked.
+    /// Ported from the unaligned-access review in PR #2.
+    #[test]
+    fn unaligned_guest_access_is_byte_accurate_and_bounds_checked() {
+        let mut vm = RiscvMachine::new(16 * 1024 * 1024, 0);
+        let ram_end = GUEST_RAM_BASE + vm.bus.ram.len() as u64;
+
+        // A u64 written at an odd address reads back identically...
+        let odd = GUEST_RAM_BASE + 0x1001;
+        vm.bus
+            .write_phys(odd, 8, 0x1122_3344_5566_7788, AccessType::Store)
+            .expect("unaligned 8-byte store");
+        assert_eq!(
+            vm.bus
+                .read_phys(odd, 8, AccessType::Load)
+                .expect("unaligned 8-byte load"),
+            0x1122_3344_5566_7788
+        );
+
+        // ...and is stored little-endian at the expected byte offsets.
+        for (offset, expected) in [0x88u8, 0x77, 0x66, 0x55, 0x44, 0x33, 0x22, 0x11]
+            .into_iter()
+            .enumerate()
+        {
+            assert_eq!(
+                vm.bus
+                    .read_phys(odd + offset as u64, 1, AccessType::Load)
+                    .expect("byte load"),
+                u64::from(expected)
+            );
+        }
+
+        // A 4-byte access straddling a 4-byte boundary is likewise exact.
+        let straddle = GUEST_RAM_BASE + 0x2003;
+        vm.bus
+            .write_phys(straddle, 4, 0xDEAD_BEEF, AccessType::Store)
+            .expect("straddling 4-byte store");
+        assert_eq!(
+            vm.bus
+                .read_phys(straddle, 2, AccessType::Load)
+                .expect("low half"),
+            0xBEEF
+        );
+        assert_eq!(
+            vm.bus
+                .read_phys(straddle + 2, 2, AccessType::Load)
+                .expect("high half"),
+            0xDEAD
+        );
+
+        // Unaligned accesses that leave guest RAM must fault instead of wrapping.
+        assert!(vm
+            .bus
+            .read_phys(ram_end - 3, 8, AccessType::Load)
+            .is_err());
+        assert!(vm
+            .bus
+            .write_phys(ram_end - 1, 2, 0, AccessType::Store)
+            .is_err());
+        assert!(vm
+            .bus
+            .read_phys(GUEST_RAM_BASE - 4, 4, AccessType::Load)
+            .is_err());
+    }
+
+    /// Malformed kernel payloads must be rejected loudly rather than booted as garbage.
+    /// Ported from the malformed-executable review in PR #2.
+    #[test]
+    fn malformed_kernel_images_are_rejected() {
+        // Header parsing: too short, then a wrong magic at the documented offset.
+        assert!(RiscvLinuxImageHeader::parse(&[]).is_err());
+        let mut short = [0u8; 32];
+        short[0] = 1;
+        assert!(RiscvLinuxImageHeader::parse(&short).is_err());
+
+        let mut bad_magic = [0u8; 64];
+        bad_magic[56..60].copy_from_slice(&0xDEAD_BEEFu32.to_le_bytes());
+        assert!(RiscvLinuxImageHeader::parse(&bad_magic).is_err());
+
+        // A well-formed header reports the default 2 MiB load offset when text_offset is 0.
+        let mut good = [0u8; 64];
+        good[56..60].copy_from_slice(&RISCV_IMAGE_MAGIC2.to_le_bytes());
+        good[16..24].copy_from_slice(&64u64.to_le_bytes());
+        let header = RiscvLinuxImageHeader::parse(&good).expect("valid header");
+        assert_eq!(header.text_offset, KERNEL_LOAD_OFFSET);
+        assert_eq!(header.image_size, 64);
+
+        // The loader refuses an empty payload...
+        let mut vm = RiscvMachine::new(16 * 1024 * 1024, 0);
+        assert_eq!(
+            vm.load_linux_image(&[], None, "console=ttyS0", [0u8; 32]),
+            Err("kernel image must not be empty")
+        );
+
+        // ...and refuses a payload that cannot fit in guest RAM.
+        let oversized = vec![0u8; 16 * 1024 * 1024 + 4096];
+        assert_eq!(
+            vm.load_linux_image(&oversized, None, "console=ttyS0", [0u8; 32]),
+            Err("kernel image exceeds guest RAM")
+        );
+
+        // A non-Image payload is still accepted as a raw kernel for bare-metal guests,
+        // which is the documented behaviour for the mini-OS test kernels.
+        let raw = vec![0x13u8; 4096];
+        let (entry, dtb) = vm
+            .load_linux_image(&raw, None, "console=ttyS0", [0u8; 32])
+            .expect("raw kernel accepted");
+        assert_eq!(entry, GUEST_RAM_BASE + KERNEL_LOAD_OFFSET);
+        assert!(dtb > entry);
     }
 }
