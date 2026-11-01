@@ -10,6 +10,16 @@ const CHUNK_FILE_MAGIC = 0x4358_4e57; // "WNXC" little-endian
 const CHUNK_FILE_VERSION = 1;
 const CHUNK_HEADER_BYTES = 16;
 
+/**
+ * Maximum number of bytes handed to a single OPFS write call.
+ *
+ * Browsers have been observed to short-write (and, with positioned writes, corrupt)
+ * large buffers, so every OPFS write is split into bounded pieces and the persisted
+ * size is verified afterwards. A silently truncated chunk would otherwise only be
+ * noticed on the next read.
+ */
+const OPFS_WRITE_PIECE_BYTES = 64 * 1024;
+
 export interface OpfsChunkRecord {
   readonly chunkIndex: number;
   readonly generation: number;
@@ -95,8 +105,24 @@ export class OpfsChunkBackend {
     envelope.set(data, CHUNK_HEADER_BYTES);
 
     const writable = await fileHandle.createWritable();
-    await writable.write(envelope);
-    await writable.close();
+    try {
+      for (let offset = 0; offset < envelope.byteLength; offset += OPFS_WRITE_PIECE_BYTES) {
+        const end = Math.min(offset + OPFS_WRITE_PIECE_BYTES, envelope.byteLength);
+        await writable.write(envelope.subarray(offset, end));
+      }
+      await writable.close();
+    } catch (error) {
+      await writable.abort().catch(() => undefined);
+      throw error;
+    }
+
+    const persisted = await fileHandle.getFile();
+    if (persisted.size !== envelope.byteLength) {
+      throw new StorageValidationError(
+        'io_interrupted',
+        `OPFS chunk ${filename} short-wrote: ${String(persisted.size)} of ${String(envelope.byteLength)} bytes`,
+      );
+    }
     return checksum;
   }
 
