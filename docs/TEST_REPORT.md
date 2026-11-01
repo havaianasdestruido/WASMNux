@@ -236,11 +236,13 @@ loosening a gate; the fixes are formatting-only.
 ### Final tree and gates
 
 - `main` after the consolidation merge: `f3eba731d00bc74e02465a28c4b0fccc12b2cbc1`.
+- Final `main` after the documentation follow-up: `d065d208a5bdb45c90ed3aa99f5a9e1d82bcdf1a` (CI `41260724333`, 13/13 green).
 - Pre-merge gate run on the exact merged tree: **`41259403266` — success, 13/13 gates**
   (fmt, `check --all-targets`, clippy host + `wasm32`, `cargo test --workspace` 19 tests,
   `build-wasm.sh`, Prettier, ESLint, `tsc --noEmit`, Vitest 12 files/32 tests, `vite build`,
   Playwright 6 specs).
-- Post-merge `main` gate run: **`41259753779` — success, 13/13 gates**.
+- Post-merge `main` gate runs: **`41259753779`** (`f3eba73`) and **`41260724333`**
+  (`d065d20`) — both success, 13/13 gates.
 
 ### Failing, blocked and skipped items
 
