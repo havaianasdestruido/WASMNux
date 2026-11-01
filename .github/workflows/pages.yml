@@ -3,9 +3,13 @@ name: Deploy to GitHub Pages
 # Builds the fully static WASMNux site (Rust -> WASM runtime + Vite bundle + guest images)
 # and publishes `dist/` to GitHub Pages on every push to `main`.
 #
-# One-time repository setup: Settings -> Pages -> "Build and deployment" -> Source: "GitHub Actions".
-# The workflow also exposes `workflow_dispatch` so a deployment can be triggered manually from any
-# branch once Pages is enabled.
+# One-time repository setup (required, cannot be automated with GITHUB_TOKEN):
+#   Settings -> Pages -> "Build and deployment" -> Source: "GitHub Actions"
+# Creating a Pages site through the REST API requires repository admin rights, which the workflow
+# token does not have, so `enablement` is intentionally not used here.
+#
+# The workflow also exposes `workflow_dispatch` so a deployment can be re-run manually once Pages
+# is enabled.
 
 on:
   push:
@@ -55,8 +59,6 @@ jobs:
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
-        with:
-          enablement: true
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
