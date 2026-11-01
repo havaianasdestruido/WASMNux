@@ -341,8 +341,8 @@ impl RiscvMachine {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::csr::{CSR_SATP, CSR_SCAUSE, CSR_SEPC, CSR_SSTATUS, CSR_STVEC, SSTATUS_SUM};
     use crate::boot::RISCV_IMAGE_MAGIC2;
+    use crate::csr::{CSR_SATP, CSR_SCAUSE, CSR_SEPC, CSR_SSTATUS, CSR_STVEC, SSTATUS_SUM};
     use crate::fdt::FDT_MAGIC;
     use crate::trap::{AccessType, PrivMode, Trap};
 
@@ -840,10 +840,7 @@ mod tests {
         );
 
         // Unaligned accesses that leave guest RAM must fault instead of wrapping.
-        assert!(vm
-            .bus
-            .read_phys(ram_end - 3, 8, AccessType::Load)
-            .is_err());
+        assert!(vm.bus.read_phys(ram_end - 3, 8, AccessType::Load).is_err());
         assert!(vm
             .bus
             .write_phys(ram_end - 1, 2, 0, AccessType::Store)
