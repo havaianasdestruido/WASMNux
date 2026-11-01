@@ -199,3 +199,68 @@ the guest independently of Playwright.
 4. Guest payloads are prebuilt; the from-source pipeline was not re-executed here.
 5. One unrelated CI run showed a transient Vitest failure that did not reproduce on
    re-run with identical sources; the benchmark thresholds remain timing-sensitive.
+
+---
+
+## C.5 — Final acceptance report (five-PR consolidation)
+
+### Merged PRs
+
+Exactly **one** of the five candidate PRs was merged.
+
+| PR | Head at review | Outcome | Evidence |
+| --- | --- | --- | --- |
+| #4 | `c2e7f66`-lineage | **merged** → `main` `438b831fcd9c16e3fb035884d92f3a0507c23498` (2026-11-01T00:38:40Z) | its CI gates were re-run on the merged tree, see below |
+| #1 | `01b6f4585` | closed, superseded | preserved items listed in the closure comment; second emulator excluded |
+| #2 | `bdf7fa735` | closed, superseded | three tests ported, see C.3 |
+| #3 | `ec5ae6f11` | closed, superseded | nothing executable preserved; `ARCHITECTURE.md` §7 contradicted by `E-DEB-02` |
+| #5 | `9a7151617` | closed, superseded | OPFS bounded writes + asset manifest ported; BusyBox 1.37.0 excluded |
+
+### Post-merge commits (all on top of `438b831`, all individually tested)
+
+| Commit | Change | Test evidence |
+| --- | --- | --- |
+| `4b3032c` | `FCVT.L.D`/`FCVT.LU.D`/`FCVT.D.LU` regression test + CI failure diagnostics | CI `41257340257` — success |
+| `03e4dc9` | merge of `origin/main` into the consolidation branch (no feature content) | — |
+| `f934c83` | OPFS writes bounded to 64 KiB, short write reported as `io_interrupted` | `tests/unit/opfs-write-integrity.test.ts`; gates covered by the next run |
+| `2026660` | unaligned access + malformed kernel image regression tests | CI `41257986167` — **failure at gate 6 (`cargo fmt`)**, Rust compile/tests never ran |
+| `e297cb7` | the two rustfmt transformations CI demanded (import ordering, assert-chain wrap); no semantic change | CI `41258212908` — success, 13/13 |
+| `334abf5` | `public/assets-manifest.json`, `tools/hash-assets.mjs`, `tests/unit/assets-manifest.test.ts`, `docs/ASSETS.md` | `node tools/hash-assets.mjs --check` matches; Vitest 2/2; gates covered by the next run |
+| `55e7bf1` | `TODO.MD` rewritten; this report's C.1–C.4 | CI `41258702373` — **failure at gate 11 (`format:check`)**: the new manifest test was not Prettier-formatted |
+| `10efbc5` | Prettier fix for the manifest test + TypeScript gate output capture in CI | CI `41258974724` and `41259403266` — success, 13/13 |
+
+Both failures above were real gate failures introduced by the same pass, caught by CI and
+fixed in the immediately following commit. Neither was worked around by disabling or
+loosening a gate; the fixes are formatting-only.
+
+### Final tree and gates
+
+- `main` after the consolidation merge: `f3eba731d00bc74e02465a28c4b0fccc12b2cbc1`.
+- Pre-merge gate run on the exact merged tree: **`41259403266` — success, 13/13 gates**
+  (fmt, `check --all-targets`, clippy host + `wasm32`, `cargo test --workspace` 19 tests,
+  `build-wasm.sh`, Prettier, ESLint, `tsc --noEmit`, Vitest 12 files/32 tests, `vite build`,
+  Playwright 6 specs).
+- Post-merge `main` gate run: **`41259753779` — success, 13/13 gates**.
+
+### Failing, blocked and skipped items
+
+| Item | Status | Reason |
+| --- | --- | --- |
+| `Deploy to GitHub Pages` on `main` (`41259753763`) | **failing** | `configure-pages` returns `Not Found`: Pages is not enabled for the repository. Requires an admin action in repository settings; not fixable from the workflow. Does not affect `CI`. |
+| Official Debian archive (`deb.debian.org`) | blocked | No TLS stack in the guest and no egress relay; only the bundled four-package repository is reachable. Recorded as `E-DEB-02` limitation, not as verification. |
+| Snapshot restore/delete through the UI | not implemented | E2E only creates snapshots; restore/delete is covered only at ABI level (`tests/unit/wasm-runtime.test.ts`). |
+| Offline cold start | not implemented | No service-worker offline E2E exists. |
+| Firefox / WebKit, hardware WebGPU, SMP | unverified | Chromium + SwiftShader only. |
+| From-source guest asset rebuild | unverified | Building the kernel/rootfs requires upstream hosts unavailable in this environment; `docs/ASSETS.md` pins what *is* verified (tag, commit, digests). |
+| BusyBox 1.37.0 (#5) | deferred | Requires rebuilding initramfs and ext4 from a 1.37.0 static binary; the shipped images contain 1.36.1. |
+
+### Local commands re-run at the end of the work
+
+```
+npm run format:check      # All matched files use Prettier code style
+npm run lint              # no output (clean)
+npm run typecheck         # tsc --noEmit, no output (clean)
+npx vitest run            # 12 test files / 32 tests passed
+node tools/hash-assets.mjs --check   # manifest matches the 11 shipped assets
+git status --porcelain    # empty
+```

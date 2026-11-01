@@ -22,7 +22,8 @@ Central implementation plan, acceptance criteria and verification tracker for **
 
 | ID | Evidence |
 | --- | --- |
-| `E-CI` | CI run `41258212908` on `arena/94e8543e-wasmnux`: all 13 gates green |
+| `E-CI` | CI run `41259403266` on the consolidation branch: all 13 gates green |
+| `E-CI-2` | CI run `41259753779` on `main` @ `f3eba73`: all 13 gates green (post-merge) |
 | `E-BOOT-01` | Vanilla Linux reaches `wasmnux-vanilla:~#` in ~2 s / 63.3 M instructions |
 | `E-BOOT-02` | Debian 13.7 reaches `root@wasmnux-debian:/#` in ~3 s / 77.8 M instructions |
 | `E-BB` | In-guest BusyBox: `uname`, `ps`, `free`, `df`, `cat`, `mkdir`, `echo`, `sync`, `poweroff` |
@@ -197,7 +198,7 @@ Central implementation plan, acceptance criteria and verification tracker for **
 - [x] `cargo test --workspace` (19 Rust tests across 5 crates + mini-OS integration). `E-CI`
 - [x] `./scripts/build-wasm.sh`. `E-CI`
 - [x] Prettier, ESLint, `tsc --noEmit`. `E-CI`
-- [x] Vitest (13 files / 34 tests including asset manifest and OPFS integrity). `E-CI`
+- [x] Vitest (12 files / 32 tests including asset manifest and OPFS integrity). `E-CI`
 - [x] Production Vite build. `E-CI`
 - [x] Playwright E2E (6 specs: foundation, vanilla, Debian, storage restart, WebGPU/Canvas2D,
   browser interface). `E-CI`
@@ -231,3 +232,30 @@ Central implementation plan, acceptance criteria and verification tracker for **
 5. **Software WebGPU adapter** in CI; hardware adapters unverified.
 6. **No snapshot restore/delete through the UI, and no offline cold start.**
 7. **Guest assets are prebuilt**; the from-source pipeline is documented but not re-run.
+
+---
+
+## Consolidation outcome — five candidate PRs
+
+Exactly **one** of the five candidate PRs was merged: **#4**, as `main` `438b831`. The other
+four were reviewed, mined for anything that could be independently verified, and closed as
+superseded. No second branch history was merged and nothing was cherry-picked wholesale.
+
+| PR | Outcome | Preserved in `main` | Excluded |
+| --- | --- | --- | --- |
+| #1 | closed, superseded | CI-diagnostics publishing; asset provenance (`docs/ASSETS.md`, `public/assets-manifest.json`, `tools/hash-assets.mjs`, `tests/unit/assets-manifest.test.ts`) | second emulator (`crates/wasmnux-core`), unexecutable from-source guest pipeline, non-reproducible `versions.sh` "latest tag" resolution |
+| #2 | closed, superseded | `fcvt_l_d_and_fcvt_d_lu_saturate`, `unaligned_guest_access_is_byte_accurate_and_bounds_checked`, `malformed_kernel_images_are_rejected` | vendored emulator, prototype UI, unconditional tracing in `cpu.rs` |
+| #3 | closed, superseded | nothing executable | second emulator with no MMU, prototype `web/`; its `ARCHITECTURE.md` §7 (guest networking "not feasible") is contradicted by `E-DEB-02` and was deliberately not carried over |
+| #5 | closed, superseded | OPFS ≤64 KiB bounded writes + `io_interrupted` short-write reporting (`src/storage/opfs-backend.ts`, `tests/unit/opfs-write-integrity.test.ts`); asset manifest idea | BusyBox 1.37.0 config (needs a non-reproducible initramfs/ext4 rebuild), vendored emulator, unverified snapshot/offline paths |
+
+Each closure comment on GitHub lists the same preserved-versus-excluded split with exact
+paths/lines, and claims preservation only where the artefact is verifiably present in `main`.
+
+### Still open after consolidation
+
+- The four PRs above stay **closed, not merged**; their head branches are untouched history.
+- GitHub Pages deployment (workflow from #6/#7) fails at `configure-pages` because Pages is
+  not enabled on the repository — a repository-settings action only an admin can take. This
+  does not affect the `CI` workflow, which is green on `main`.
+- Everything listed under "Known limitations (summary)" above remains open; none of it is
+  marked `[x]`.
