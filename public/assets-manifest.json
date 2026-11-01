@@ -1,0 +1,51 @@
+{
+  "manifestVersion": 1,
+  "description": "SHA-256 and byte length of every immutable guest asset shipped in public/. Rebuilt artifacts (the WASM runtime) are intentionally excluded because they are produced from source by scripts/build-wasm.sh.",
+  "generatedBy": "node tools/hash-assets.mjs (see docs/ASSETS.md)",
+  "assets": {
+    "images/vmlinux-7.3.1-riscv64.Image.gz": {
+      "sha256": "30954ed52d898eb6d18b4d1cfc0f9bd50e23598a0c8a243b7947b916317fb5ba",
+      "bytes": 3314317
+    },
+    "images/vanilla-initramfs.cpio.gz": {
+      "sha256": "b4d4aa718ddb2d5ebcc9ffbfe4867b4ffade4dd004b096d9011a03bb13e91807",
+      "bytes": 811224
+    },
+    "images/vanilla-disk.ext4.gz": {
+      "sha256": "3b39afba43fd7ae1b8b10dfca40ef5e735ed68e17a37f296defbe08aabc58e39",
+      "bytes": 71424
+    },
+    "images/debian-rootfs.ext4.gz": {
+      "sha256": "adb1678f414eaffd45c25f49f1c5dd7c2cd9181868447f845edbcdb1ff057032",
+      "bytes": 29584790
+    },
+    "debian-repo/dists/trixie/Release": {
+      "sha256": "07dc29a91591b99e9e7613d96b32a924603d8697ced4f6f2b4967b0f45ae0c74",
+      "bytes": 613
+    },
+    "debian-repo/dists/trixie/main/binary-riscv64/Packages": {
+      "sha256": "320d47c22b6485812296e943d0e0129f9fbd2c887d992048643b02cd9940d7c3",
+      "bytes": 1987
+    },
+    "debian-repo/dists/trixie/main/binary-riscv64/Packages.xz": {
+      "sha256": "87de90d7e66776cde93094aa52f17f6e89ac922509ad8199ce78fa195bbd3b6d",
+      "bytes": 884
+    },
+    "debian-repo/pool/main/w/wasmnux-fbtools/wasmnux-fbtools_1.0.0_riscv64.deb": {
+      "sha256": "e29448e052ae79b1e799dccfe95374bdc9b3bb59c49e82e32b21753f182133ba",
+      "bytes": 954
+    },
+    "debian-repo/pool/main/w/wasmnux-hello/wasmnux-hello_1.0.0_riscv64.deb": {
+      "sha256": "52c259f77eafe59a7719f4fafc57e1d5adb386c1ad51fea425d617f6d69efa9d",
+      "bytes": 19454
+    },
+    "debian-repo/pool/main/w/wasmnux-notes/wasmnux-notes_1.0.0_all.deb": {
+      "sha256": "b6009abe207af77b138bfecc7e9a81fe290041e77048ad9cfdd00aa55138b477",
+      "bytes": 1024
+    },
+    "debian-repo/pool/main/w/wasmnux-sysbench/wasmnux-sysbench_1.0.0_riscv64.deb": {
+      "sha256": "0ad2826b6c0d0c58640c82164239a0fd24acc70fad874437f5a8045e57b5b297",
+      "bytes": 21752
+    }
+  }
+}
