@@ -1,0 +1,13 @@
+[package]
+name = "wasmnux-virtio"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+wasmnux-riscv = { path = "../wasmnux-riscv" }
+wasmnux-storage = { path = "../wasmnux-storage" }
+wasmnux-net = { path = "../wasmnux-net" }
+
+[lints]
+workspace = true

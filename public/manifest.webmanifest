@@ -1,0 +1,17 @@
+{
+  "name": "WASMNux — Browser-Native Linux",
+  "short_name": "WASMNux",
+  "description": "Real RISC-V 64-bit Linux 7.3.1 & Official Debian 13.7 in WebAssembly with WebGPU & Persistent OPFS Storage",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#070b14",
+  "theme_color": "#0b1120",
+  "icons": [
+    {
+      "src": "./icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

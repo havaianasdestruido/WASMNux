@@ -1,0 +1,59 @@
+Package: wasmnux-fbtools
+Version: 1.0.0
+Architecture: riscv64
+Maintainer: WASMNux Maintainers <maintainers@wasmnux.local>
+Installed-Size: 1
+Filename: pool/main/w/wasmnux-fbtools/wasmnux-fbtools_1.0.0_riscv64.deb
+Size: 954
+MD5sum: 6c99b6af46997dc3a9cbb2a5f728ecd2
+SHA1: 08fef54243d586a64b6337a021371f9e92b10c03
+SHA256: e29448e052ae79b1e799dccfe95374bdc9b3bb59c49e82e32b21753f182133ba
+Section: utils
+Priority: optional
+Description: WASMNux Linux /dev/fb0 framebuffer pattern generator
+
+Package: wasmnux-hello
+Version: 1.0.0
+Architecture: riscv64
+Maintainer: WASMNux Maintainers <maintainers@wasmnux.local>
+Installed-Size: 33
+Depends: libc6 (>= 2.38)
+Filename: pool/main/w/wasmnux-hello/wasmnux-hello_1.0.0_riscv64.deb
+Size: 19454
+MD5sum: fba6f6899cc23cc45b1a58ddedc1a9ad
+SHA1: a6b39800198a659566e87d020742a2fe38df6579
+SHA256: 52c259f77eafe59a7719f4fafc57e1d5adb386c1ad51fea425d617f6d69efa9d
+Section: utils
+Priority: optional
+Description: WASMNux RISC-V native verification greeting utility
+
+Package: wasmnux-notes
+Version: 1.0.0
+Architecture: all
+Maintainer: WASMNux Maintainers <maintainers@wasmnux.local>
+Installed-Size: 1
+Depends: bash
+Filename: pool/main/w/wasmnux-notes/wasmnux-notes_1.0.0_all.deb
+Size: 1024
+MD5sum: cd85114b05bd0bf6f24a64b5a3c583e5
+SHA1: 2910268cea48776a63a234f1b58473102beb1806
+SHA256: b6009abe207af77b138bfecc7e9a81fe290041e77048ad9cfdd00aa55138b477
+Section: utils
+Priority: optional
+Description: WASMNux Debian profile metadata helper
+
+Package: wasmnux-sysbench
+Version: 1.0.0
+Architecture: riscv64
+Maintainer: WASMNux Maintainers <maintainers@wasmnux.local>
+Installed-Size: 37
+Depends: wasmnux-hello (>= 1.0.0)
+Filename: pool/main/w/wasmnux-sysbench/wasmnux-sysbench_1.0.0_riscv64.deb
+Size: 21752
+MD5sum: 60521e5a2541d64b5a07ddd62134ba8c
+SHA1: c29ba4c3daed89ea051bc5b67fed62c82071c311
+SHA256: 0ad2826b6c0d0c58640c82164239a0fd24acc70fad874437f5a8045e57b5b297
+Section: utils
+Priority: optional
+Description: WASMNux RISC-V CPU and memory throughput microbenchmark
+
