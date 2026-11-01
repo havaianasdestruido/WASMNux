@@ -23,7 +23,8 @@ Central implementation plan, acceptance criteria and verification tracker for **
 | ID | Evidence |
 | --- | --- |
 | `E-CI` | CI run `41259403266` on the consolidation branch: all 13 gates green |
-| `E-CI-2` | CI run `41259753779` on `main` @ `f3eba73`: all 13 gates green (post-merge) |
+| `E-CI-2` | CI run `41260724333` on `main` @ `d065d20` (final): all 13 gates green (post-merge) |
+| `E-CI-3` | CI run `41259753779` on `main` @ `f3eba73`: all 13 gates green (post-merge) |
 | `E-BOOT-01` | Vanilla Linux reaches `wasmnux-vanilla:~#` in ~2 s / 63.3 M instructions |
 | `E-BOOT-02` | Debian 13.7 reaches `root@wasmnux-debian:/#` in ~3 s / 77.8 M instructions |
 | `E-BB` | In-guest BusyBox: `uname`, `ps`, `free`, `df`, `cat`, `mkdir`, `echo`, `sync`, `poweroff` |
