@@ -14,6 +14,13 @@ WASMNUX_BENCH_OUT=/tmp/benchmark-report.json npm run bench
 npx vitest run tests/unit/benchmarks.test.ts
 ```
 
+Run it alone. Every number below is a wall-clock measurement, so anything else competing for the
+host CPU moves it: the same unmodified build measured **25.0 MIPS** with a free core and **18.5
+MIPS** while sibling Vitest workers were booting the Debian guest, which is enough to cross the
+20 MIPS floor on its own. For that reason `benchmarks.test.ts` is excluded from `npm test`
+(which asserts correctness) and is executed as its own CI step, with the results uploaded as an
+artifact. `npm run test:all` still runs everything together for local convenience.
+
 What `tests/unit/benchmarks.test.ts` executes in a single deterministic run:
 
 1. **3 independent cold boots** of **Vanilla Linux `7.3.1`** (`128 MiB` RAM, `64 MiB` `ext4`), instantiating a fresh `WasmVmRuntime` per trial and recording all 3 wall-clock times, retired RV64GC instructions, and effective MIPS.

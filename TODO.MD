@@ -136,6 +136,25 @@ Central implementation plan, acceptance criteria and verification tracker for **
       already holds a profile lease. Covered by `tests/unit/cross-tab-locks.test.ts` and
       `tests/e2e/quota-and-locks.spec.ts`.
 
+## Test & CI hygiene
+
+- [x] `benchmarks.test.ts` runs as its own CI step and is excluded from `npm test`. It asserts
+      emulator throughput (>20 MIPS) and cold boot (<15 s) — wall-clock properties measured on
+      shared hardware. Inside the parallel suite it measured **18.5 MIPS** on a 4-core CI runner
+      (three Vitest workers, one of them booting Debian for 80 s) versus **25.0 MIPS** in isolation,
+      so the gate was reporting runner contention. `npm run test:all` still runs everything.
+- [x] Vitest pinned to `maxWorkers: 1`. Each test file holds a real guest (128 MiB RAM plus a
+      full-snapshot staging buffer); the full suite peaks around 2.2 GiB RSS with one worker, and
+      fanning out multiplied that. Serial is also faster in wall-clock, since the suite is dominated
+      by two long CPU-bound guest boots.
+- [x] The wasm crate's panic hook no longer swallows test failures. It replaced the default hook
+      and only recorded the message into the registry, so a panicking test printed a bare "FAILED".
+      It now emits under `cfg(test)` and records via `try_lock` (a panic inside `with_rt` already
+      holds the registry mutex, so `lock` would deadlock).
+- [x] The two `wasmnux-wasm` ABI tests serialise against each other. They share one global
+      `RuntimeRegistry` whose `io_buf` is the staging buffer, so "stage bytes, call export, read
+      bytes back" is only correct when nothing interleaves; parallel execution failed ~1 run in 5.
+
 ## Phase 5 — Vanilla Linux
 
 - [x] Kernel `Image` boots: VFS, ext4, VirtIO-Blk, PLIC, RTC, `simplefb` all initialise. `E-BOOT-01`

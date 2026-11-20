@@ -72,16 +72,16 @@ cargo test --workspace
 npm run format:check
 npm run typecheck
 npm run lint
-npm test
+npm test          # excludes benchmarks.test.ts; `npm run test:all` runs everything
 
 # 3. Reproducible performance benchmarks (cold boot, MIPS, RTT, ext4 I/O, snapshots)
-npm run bench
+npm run bench     # run alone: these assert throughput and must not share a CPU
 
 # 4. Full Headless Chromium 153 Playwright E2E suite (Vanilla, Debian APT, WebGPU, Storage, UI/PWA)
 npm run test:e2e
 ```
 
-### Measured Performance Summary (`docs/BENCHMARKS.md` — `2026-10-31T23:35:44.846Z`, 2-vCPU Xeon @ 2.60 GHz)
+### Measured Performance Summary (`docs/BENCHMARKS.md` — `2026-11-20T16:57:15.666Z`, 2-vCPU Xeon @ 2.60 GHz)
 
 | Metric                                                              | Measured Value (`N=3` boots / snapshots, `N=5` RTT)                                    |
 | ------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
