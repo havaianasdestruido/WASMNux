@@ -15,6 +15,8 @@ import {
 } from './crc32';
 import {
   IdbStorageBackend,
+  isQuotaExceededError,
+  normalizeStorageError,
   type CommittedChunkSlot,
   type ProfileManifestRecord,
   type StoredSnapshotRecord,
@@ -22,6 +24,9 @@ import {
 import { OpfsChunkBackend } from './opfs-backend';
 
 export type ActiveStorageMode = 'opfs+idb' | 'idb-only' | 'memory';
+
+/** Prefix reserved for quota-probe scratch profiles (never mounted by a VM). */
+export const QUOTA_PROBE_PROFILE_PREFIX = 'quotaprobe-';
 
 export interface StorageDriverAdapter {
   readonly mode: ActiveStorageMode;
@@ -371,6 +376,13 @@ export interface ProfileStorageStatus {
   readonly updatedAtIso: string | null;
 }
 
+/** Record of a genuine browser storage-quota exhaustion observed during a commit. */
+export interface QuotaExhaustionRecord {
+  readonly profileId: string;
+  readonly occurredAtIso: string;
+  readonly message: string;
+}
+
 export interface QuotaHealthReport {
   readonly mode: ActiveStorageMode;
   readonly persisted: boolean;
@@ -379,16 +391,182 @@ export interface QuotaHealthReport {
   readonly availableBytes: number;
   readonly lowSpaceWarning: boolean;
   readonly evictionRiskWarning: boolean;
+  /** Cross-tab locking mechanism in use (`web-locks` in browsers, `in-process` in Node). */
+  readonly crossTabLockMode: CrossTabLockMode;
+  /** Last genuine `QuotaExceededError` seen by this engine, if any. */
+  readonly lastQuotaExhaustion: QuotaExhaustionRecord | null;
+}
+
+/**
+ * Minimal structural view of the Web Locks API (`navigator.locks`). Declared locally instead of
+ * relying on `lib.dom` so the same code runs under Node/Vitest where the API is absent.
+ */
+export interface WebLocksManager {
+  request<T>(
+    name: string,
+    options: { readonly mode?: 'exclusive' | 'shared'; readonly signal?: AbortSignal },
+    callback: (lock: unknown) => Promise<T>,
+  ): Promise<T>;
+}
+
+export type CrossTabLockMode = 'web-locks' | 'in-process';
+
+export interface ProfileLockLease {
+  readonly profileId: string;
+  readonly mode: CrossTabLockMode;
+  release(): void;
+}
+
+function getWebLocks(): WebLocksManager | null {
+  if (typeof navigator === 'undefined') {
+    return null;
+  }
+  const locks: unknown = (navigator as unknown as Record<string, unknown>)['locks'];
+  if (locks === null || typeof locks !== 'object') {
+    return null;
+  }
+  const request = (locks as Record<string, unknown>)['request'];
+  return typeof request === 'function' ? (locks as WebLocksManager) : null;
 }
 
 export class PersistentStorageEngine {
   private readonly adapter: StorageDriverAdapter;
   private maxOverlayChunksPerProfile: number | null = null;
-  /** Per-profile serialization lock preventing concurrent commit races. */
+  /** Per-profile serialization lock preventing concurrent commit races within this realm. */
   private readonly commitChains = new Map<string, Promise<void>>();
+  /**
+   * Held cross-tab lock leases (profileId -> lease). When the Web Locks API is available the lease
+   * is backed by an `exclusive` `wasmnux-profile-<id>` browser lock so two tabs can never write the
+   * same profile concurrently; otherwise it degrades to the in-process commit chain.
+   */
+  private readonly lockLeases = new Map<string, ProfileLockLease>();
+  private readonly heldWebLocks = new Map<string, () => void>();
+  private lastQuotaExhaustion: QuotaExhaustionRecord | null = null;
 
   public constructor(adapter: StorageDriverAdapter) {
     this.adapter = adapter;
+  }
+
+  /** Which cross-tab locking mechanism this realm can use. */
+  public get crossTabLockMode(): CrossTabLockMode {
+    return getWebLocks() === null ? 'in-process' : 'web-locks';
+  }
+
+  /**
+   * Acquire an exclusive cross-tab lock for `profileId`, waiting for other tabs to release it.
+   *
+   * Web Locks are held on `navigator.locks` under `wasmnux-profile-<profileId>`; a lease must be
+   * released by calling `release()`. Acquiring the same profile twice in one engine is idempotent
+   * and returns the existing lease.
+   *
+   * Pass `timeoutMs` to bound the wait: if another tab still owns the profile, the request is
+   * aborted and a typed `profile_locked` `StorageValidationError` is thrown. This is how the app
+   * refuses to mutate a profile that a different tab is actively driving.
+   */
+  public async acquireProfileLock(
+    profileId: string,
+    timeoutMs?: number,
+  ): Promise<ProfileLockLease> {
+    validateStorageIdentifier(profileId);
+    const existing = this.lockLeases.get(profileId);
+    if (existing) {
+      return existing;
+    }
+    const locks = getWebLocks();
+    if (locks === null) {
+      let released = false;
+      const lease: ProfileLockLease = {
+        profileId,
+        mode: 'in-process',
+        release: () => {
+          if (released) {
+            return;
+          }
+          released = true;
+          this.lockLeases.delete(profileId);
+        },
+      };
+      this.lockLeases.set(profileId, lease);
+      return lease;
+    }
+
+    const name = `wasmnux-profile-${profileId}`;
+    const controller = typeof AbortController === 'function' ? new AbortController() : null;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let grant!: () => void;
+    const granted = new Promise<void>((resolve) => {
+      grant = resolve;
+    });
+    if (timeoutMs !== undefined && controller !== null) {
+      timer = setTimeout(
+        () => {
+          controller.abort();
+        },
+        Math.max(1, timeoutMs),
+      );
+    }
+    let releaseHolder!: () => void;
+    const held = new Promise<void>((resolve) => {
+      releaseHolder = resolve;
+    });
+    const requestPromise = locks.request<undefined>(
+      name,
+      controller === null
+        ? { mode: 'exclusive' }
+        : { mode: 'exclusive', signal: controller.signal },
+      async () => {
+        grant();
+        await held;
+      },
+    );
+    requestPromise.catch(() => undefined);
+
+    if (timer !== null) {
+      // Race the grant against the abort so a held lock turns into a typed error, not a hang.
+      const grantedOrAborted = await Promise.race([
+        granted.then(() => 'granted' as const),
+        new Promise<'aborted'>((resolve) => {
+          controller?.signal.addEventListener('abort', () => {
+            resolve('aborted');
+          });
+        }),
+      ]);
+      clearTimeout(timer);
+      if (grantedOrAborted === 'aborted') {
+        throw new StorageValidationError(
+          'profile_locked',
+          `Profile '${profileId}' is locked by another tab; retry once it is released`,
+        );
+      }
+    } else {
+      await granted;
+    }
+
+    let released = false;
+    const lease: ProfileLockLease = {
+      profileId,
+      mode: 'web-locks',
+      release: () => {
+        if (released) {
+          return;
+        }
+        released = true;
+        this.lockLeases.delete(profileId);
+        this.heldWebLocks.delete(profileId);
+        releaseHolder();
+      },
+    };
+    this.lockLeases.set(profileId, lease);
+    this.heldWebLocks.set(profileId, () => {
+      lease.release();
+    });
+    return lease;
+  }
+
+  /** Release a cross-tab lease previously returned by `acquireProfileLock`. */
+  public releaseProfileLock(profileId: string): void {
+    this.heldWebLocks.get(profileId)?.();
+    this.lockLeases.get(profileId)?.release();
   }
 
   public static async createAuto(options?: {
@@ -426,7 +604,26 @@ export class PersistentStorageEngine {
 
   private enqueueExclusive<T>(profileId: string, task: () => Promise<T>): Promise<T> {
     const prev = this.commitChains.get(profileId) ?? Promise.resolve();
-    const run = prev.then(task, task);
+    const guarded = async (): Promise<T> => {
+      try {
+        return await this.withCrossTabLock(profileId, task);
+      } catch (err: unknown) {
+        // Normalize once, at the boundary every storage mutation passes through, so a real
+        // `QuotaExceededError` DOMException from any backend (OPFS, IDB, manifest writes) is
+        // always reported as a typed `quota_exceeded` error.
+        const normalized = normalizeStorageError(err, `operation on profile '${profileId}'`);
+        if (normalized !== err) {
+          this.lastQuotaExhaustion = {
+            profileId,
+            occurredAtIso: new Date().toISOString(),
+            message: normalized instanceof Error ? normalized.message : String(normalized),
+          };
+          throw normalized;
+        }
+        throw err;
+      }
+    };
+    const run = prev.then(guarded, guarded);
     this.commitChains.set(
       profileId,
       run.then(
@@ -435,6 +632,26 @@ export class PersistentStorageEngine {
       ),
     );
     return run;
+  }
+
+  /**
+   * Run `task` while holding the exclusive cross-tab lock for `profileId`.
+   *
+   * Unlike `acquireProfileLock` (a tab-lifetime lease used to mark "this tab is driving the
+   * profile"), this acquires and releases the browser lock around a single operation, so two tabs
+   * can interleave their commits safely instead of deadlocking on a lease held across tabs.
+   */
+  private async withCrossTabLock<T>(profileId: string, task: () => Promise<T>): Promise<T> {
+    const locks = getWebLocks();
+    if (locks === null) {
+      // Same-realm operations are already serialized by `commitChains`.
+      return task();
+    }
+    // If this realm already holds the long-lived lease, the lock is re-entrant within the tab.
+    if (this.lockLeases.get(profileId)?.mode === 'web-locks') {
+      return task();
+    }
+    return locks.request<T>(`wasmnux-profile-${profileId}`, { mode: 'exclusive' }, () => task());
   }
 
   /**
@@ -782,7 +999,53 @@ export class PersistentStorageEngine {
       availableBytes: available,
       lowSpaceWarning: quota > 0 && available < 64 * 1024 * 1024,
       evictionRiskWarning: this.adapter.mode === 'memory' || !persisted,
+      crossTabLockMode: this.crossTabLockMode,
+      lastQuotaExhaustion: this.lastQuotaExhaustion,
     };
+  }
+
+  /**
+   * Probe the origin for real quota exhaustion by writing `chunkCount` 64 KiB scratch chunks and
+   * returning how many succeeded. A count lower than `chunkCount` means the browser genuinely
+   * refused a write (typed `quota_exceeded`), which is the condition unit-test simulations cannot
+   * cover. The scratch profile is always cleared afterwards, so no guest data is touched.
+   */
+  public async probeQuotaExhaustion(chunkCount: number): Promise<{
+    readonly attempted: number;
+    readonly written: number;
+    readonly exhausted: boolean;
+    readonly error: QuotaExhaustionRecord | null;
+  }> {
+    const probeId = `${QUOTA_PROBE_PROFILE_PREFIX}${String(Date.now())}`;
+    let written = 0;
+    let error: QuotaExhaustionRecord | null = null;
+    for (let i = 0; i < chunkCount; i += 1) {
+      try {
+        const payload = new Uint8Array(DISK_CHUNK_BYTES);
+        payload.fill(i & 0xff);
+        await this.adapter.writeChunk(probeId, i, 1, payload);
+        written += 1;
+      } catch (err: unknown) {
+        const normalized = normalizeStorageError(err, 'quota probe');
+        if (isQuotaExceededError(normalized) || isQuotaExceededError(err)) {
+          error = {
+            profileId: probeId,
+            occurredAtIso: new Date().toISOString(),
+            message: normalized instanceof Error ? normalized.message : String(normalized),
+          };
+        } else {
+          throw normalized;
+        }
+        break;
+      }
+    }
+    try {
+      await this.adapter.clearProfileChunks(probeId);
+      await this.adapter.deleteManifest(probeId);
+    } catch {
+      // Best effort cleanup; a leftover probe profile is inert (never mounted by a VM).
+    }
+    return { attempted: chunkCount, written, exhausted: error !== null, error };
   }
 
   public setPreference(key: string, value: unknown): Promise<void> {

@@ -18,6 +18,8 @@ pub struct VirtMachineFdtConfig<'a> {
     pub rng_seed: [u8; 32],
     pub virtio_mmio_slots: &'a [(u64, u32)],
     pub framebuffer: Option<(u64, u32, u32)>,
+    /// Number of CPUs advertised in `/cpus` (minimum 1).
+    pub hart_count: usize,
 }
 
 pub fn build_virt_dtb(cfg: &VirtMachineFdtConfig<'_>) -> Vec<u8> {
@@ -56,30 +58,33 @@ pub fn build_virt_dtb(cfg: &VirtMachineFdtConfig<'_>) -> Vec<u8> {
     fdt.prop_u32("#size-cells", 0);
     fdt.prop_u32("timebase-frequency", 10_000_000);
 
-    fdt.begin_node("cpu@0");
-    fdt.prop_str("device_type", "cpu");
-    fdt.prop_str("compatible", "riscv");
-    fdt.prop_u32("reg", 0);
-    fdt.prop_str("riscv,isa", cfg.isa);
-    fdt.prop_str("riscv,isa-base", "rv64i");
-    fdt.prop_str_list(
-        "riscv,isa-extensions",
-        &[
-            "i", "m", "a", "f", "d", "c", "zicsr", "zifencei", "zicntr", "zba", "zbb",
-        ],
-    );
-    fdt.prop_str("mmu-type", "riscv,sv39");
-    fdt.prop_str("status", "okay");
-    fdt.prop_u32("phandle", cpu_phandle);
+    for hart in 0..cfg.hart_count.max(1) {
+        let cpu_node = format!("cpu@{hart}");
+        fdt.begin_node(&cpu_node);
+        fdt.prop_str("device_type", "cpu");
+        fdt.prop_str("compatible", "riscv");
+        fdt.prop_u32("reg", hart as u32);
+        fdt.prop_str("riscv,isa", cfg.isa);
+        fdt.prop_str("riscv,isa-base", "rv64i");
+        fdt.prop_str_list(
+            "riscv,isa-extensions",
+            &[
+                "i", "m", "a", "f", "d", "c", "zicsr", "zifencei", "zicntr", "zba", "zbb",
+            ],
+        );
+        fdt.prop_str("mmu-type", "riscv,sv39");
+        fdt.prop_str("status", "okay");
+        fdt.prop_u32("phandle", cpu_phandle + hart as u32);
 
-    fdt.begin_node("interrupt-controller");
-    fdt.prop_u32("#interrupt-cells", 1);
-    fdt.prop_empty("interrupt-controller");
-    fdt.prop_str("compatible", "riscv,cpu-intc");
-    fdt.prop_u32("phandle", cpu_intc_phandle);
-    fdt.end_node();
+        fdt.begin_node("interrupt-controller");
+        fdt.prop_u32("#interrupt-cells", 1);
+        fdt.prop_empty("interrupt-controller");
+        fdt.prop_str("compatible", "riscv,cpu-intc");
+        fdt.prop_u32("phandle", cpu_intc_phandle + hart as u32);
+        fdt.end_node();
 
-    fdt.end_node(); // cpu@0
+        fdt.end_node(); // cpu@N
+    }
     fdt.end_node(); // cpus
 
     let mem_node = format!("memory@{:x}", cfg.ram_base);
@@ -128,10 +133,12 @@ pub fn build_virt_dtb(cfg: &VirtMachineFdtConfig<'_>) -> Vec<u8> {
     fdt.begin_node("clint@2000000");
     fdt.prop_str_list("compatible", &["sifive,clint0", "riscv,clint0"]);
     fdt.prop_u64s("reg", &[0x0200_0000, 0x0001_0000]);
-    fdt.prop_u32s(
-        "interrupts-extended",
-        &[cpu_intc_phandle, 3, cpu_intc_phandle, 7],
-    );
+    let mut clint_irqs: Vec<u32> = Vec::with_capacity(cfg.hart_count.max(1) * 4);
+    for hart in 0..cfg.hart_count.max(1) {
+        let intc = cpu_intc_phandle + hart as u32;
+        clint_irqs.extend_from_slice(&[intc, 3, intc, 7]);
+    }
+    fdt.prop_u32s("interrupts-extended", &clint_irqs);
     fdt.end_node();
 
     // Platform-Level Interrupt Controller (PLIC)
@@ -143,10 +150,14 @@ pub fn build_virt_dtb(cfg: &VirtMachineFdtConfig<'_>) -> Vec<u8> {
     fdt.prop_empty("interrupt-controller");
     fdt.prop_u64s("reg", &[0x0C00_0000, 0x0400_0000]);
     fdt.prop_u32("riscv,ndev", 31);
-    fdt.prop_u32s(
-        "interrupts-extended",
-        &[cpu_intc_phandle, 11, cpu_intc_phandle, 9],
-    );
+    let mut plic_irqs: Vec<u32> = Vec::with_capacity(cfg.hart_count.max(1) * 2);
+    for hart in 0..cfg.hart_count.max(1) {
+        plic_irqs.extend_from_slice(&[cpu_intc_phandle + hart as u32, 11]);
+    }
+    for hart in 0..cfg.hart_count.max(1) {
+        plic_irqs.extend_from_slice(&[cpu_intc_phandle + hart as u32, 9]);
+    }
+    fdt.prop_u32s("interrupts-extended", &plic_irqs);
     fdt.end_node();
 
     // NS16550A UART Serial Console

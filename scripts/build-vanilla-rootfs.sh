@@ -5,8 +5,9 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 export PATH="/tmp/wasmnux-tools/llvm/bin:/tmp/wasmnux-tools/host/bin:/usr/local/bin:/usr/sbin:/sbin:$PATH"
 
 BUILD_ROOT="${WASMNUX_GUEST_BUILD_DIR:-/tmp/wasmnux-guest-build}"
-BUSYBOX_SRC="${BUILD_ROOT}/busybox-1.36.1"
-BUSYBOX_BIN="${BUILD_ROOT}/busybox-riscv64-static"
+BUSYBOX_VERSION="${WASMNUX_BUSYBOX_VERSION:-1.37.0}"
+BUSYBOX_SRC="${BUILD_ROOT}/busybox-${BUSYBOX_VERSION}"
+BUSYBOX_BIN="${BUILD_ROOT}/busybox-${BUSYBOX_VERSION}-riscv64-static"
 STAGE_DIR="${BUILD_ROOT}/vanilla-initramfs-stage"
 DISK_STAGE_DIR="${BUILD_ROOT}/vanilla-disk-stage"
 DEST_DIR="${ROOT_DIR}/public/images"
@@ -150,7 +151,7 @@ NAME="WASMNux Vanilla Linux"
 ID=wasmnux-vanilla
 VERSION="7.3.1"
 VERSION_ID="7.3.1"
-PRETTY_NAME="WASMNux Vanilla Linux 7.3.1 (RISC-V 64-bit / BusyBox 1.36.1)"
+PRETTY_NAME="WASMNux Vanilla Linux 7.3.1 (RISC-V 64-bit / BusyBox ${BUSYBOX_VERSION})"
 HOME_URL="https://github.com/havaianasdestruido/WASMNux"
 EOF
 

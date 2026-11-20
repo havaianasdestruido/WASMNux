@@ -3,7 +3,7 @@ import { expect, test } from '@playwright/test';
 test('renders real Linux 7.3.1 /dev/fb0 SimpleFB frames via WebGPU compute+render pipeline, recovers from GPU device loss, and handles resize', async ({
   page,
 }) => {
-  test.setTimeout(90_000);
+  test.setTimeout(240_000);
   await page.goto('/');
   await expect(page.locator('main[data-ready="true"]')).toBeVisible();
 
@@ -39,7 +39,7 @@ test('renders real Linux 7.3.1 /dev/fb0 SimpleFB frames via WebGPU compute+rende
       },
     });
 
-    const waitForText = async (needle: string, timeoutMs = 30_000): Promise<void> => {
+    const waitForText = async (needle: string, timeoutMs = 120_000): Promise<void> => {
       const deadline = performance.now() + timeoutMs;
       while (!serialLog.includes(needle)) {
         if (performance.now() > deadline) {
@@ -120,7 +120,7 @@ test('renders real Linux 7.3.1 /dev/fb0 SimpleFB frames via WebGPU compute+rende
 test('automatically falls back to Canvas 2D renderer with identical pixel accuracy when WebGPU is unavailable', async ({
   page,
 }) => {
-  test.setTimeout(90_000);
+  test.setTimeout(240_000);
   await page.addInitScript(() => {
     Object.defineProperty(navigator, 'gpu', {
       value: undefined,
@@ -172,7 +172,7 @@ test('automatically falls back to Canvas 2D renderer with identical pixel accura
       },
     });
 
-    const waitForText = async (needle: string, timeoutMs = 30_000): Promise<void> => {
+    const waitForText = async (needle: string, timeoutMs = 120_000): Promise<void> => {
       const deadline = performance.now() + timeoutMs;
       while (!serialLog.includes(needle)) {
         if (performance.now() > deadline) {

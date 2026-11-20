@@ -16,6 +16,7 @@ declare global {
     __WASMNUX_STORAGE_API__?: {
       readonly createAuto: typeof PersistentStorageEngine.createAuto;
       readonly crc32: typeof crc32;
+      readonly engineCtor: typeof PersistentStorageEngine;
     };
     __WASMNUX_BOOT_ORCHESTRATOR_CTOR__?: typeof BootOrchestrator;
     __WASMNUX_DISPLAY_CONTROLLER_CTOR__?: typeof FramebufferDisplayController;
@@ -27,6 +28,7 @@ if (typeof window !== 'undefined') {
   window.__WASMNUX_STORAGE_API__ = {
     createAuto: (opts) => PersistentStorageEngine.createAuto(opts),
     crc32,
+    engineCtor: PersistentStorageEngine,
   };
   window.__WASMNUX_BOOT_ORCHESTRATOR_CTOR__ = BootOrchestrator;
   window.__WASMNUX_DISPLAY_CONTROLLER_CTOR__ = FramebufferDisplayController;

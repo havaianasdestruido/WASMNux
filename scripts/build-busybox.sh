@@ -4,12 +4,17 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 export PATH="/tmp/wasmnux-tools/llvm/bin:/tmp/wasmnux-tools/host/bin:/usr/local/bin:/usr/sbin:/sbin:$PATH"
 
-BUSYBOX_TAG="1_36_1"
-BUSYBOX_REPO="https://github.com/mirror/busybox.git"
+# BusyBox 1.37.0 is not mirrored as a tag in `mirror/busybox` (that mirror stops at 1_36_1), so the
+# version is pinned by the upstream trunk commit whose Makefile reports VERSION=1 PATCHLEVEL=37.
+# Override BUSYBOX_TAG/BUSYBOX_VERSION for a different release.
+BUSYBOX_VERSION="${WASMNUX_BUSYBOX_VERSION:-1.37.0}"
+BUSYBOX_TAG="${WASMNUX_BUSYBOX_TAG:-master}"
+BUSYBOX_REPO="${WASMNUX_BUSYBOX_REPO:-https://github.com/mirror/busybox.git}"
+BUSYBOX_COMMIT="${WASMNUX_BUSYBOX_COMMIT:-}"
 BUILD_ROOT="${WASMNUX_GUEST_BUILD_DIR:-/tmp/wasmnux-guest-build}"
-SRC_DIR="${BUILD_ROOT}/busybox-1.36.1"
+SRC_DIR="${BUILD_ROOT}/busybox-${BUSYBOX_VERSION}"
 WRAP_BIN="${BUILD_ROOT}/rv64-musl-wrap"
-OUT_BIN="${BUILD_ROOT}/busybox-riscv64-static"
+OUT_BIN="${BUILD_ROOT}/busybox-${BUSYBOX_VERSION}-riscv64-static"
 
 mkdir -p "${BUILD_ROOT}" "${WRAP_BIN}"
 
@@ -63,12 +68,26 @@ chmod +x "${WRAP_BIN}/riscv64-linux-musl-"*
 export PATH="${WRAP_BIN}:${PATH}"
 
 if [ ! -d "${SRC_DIR}/.git" ]; then
-  echo "[build-busybox] Cloning official BusyBox ${BUSYBOX_TAG} from ${BUSYBOX_REPO}..."
+  echo "[build-busybox] Cloning BusyBox ${BUSYBOX_VERSION} (${BUSYBOX_TAG}) from ${BUSYBOX_REPO}..."
   rm -rf "${SRC_DIR}"
   git clone --depth 1 --branch "${BUSYBOX_TAG}" "${BUSYBOX_REPO}" "${SRC_DIR}"
+  if [ -n "${BUSYBOX_COMMIT}" ]; then
+    git -C "${SRC_DIR}" fetch --depth 1 origin "${BUSYBOX_COMMIT}"
+    git -C "${SRC_DIR}" checkout --detach "${BUSYBOX_COMMIT}"
+  fi
 fi
 
-echo "[build-busybox] Configuring BusyBox ${BUSYBOX_TAG} (commit $(git -C "${SRC_DIR}" rev-parse HEAD))..."
+# `make kernelversion` reports e.g. `1.37.0.git` for a trunk checkout of the 1.37.0 release line;
+# compare only the release-number prefix.
+ACTUAL_BB_VERSION="$(make -s -C "${SRC_DIR}" kernelversion 2>/dev/null || true)"
+case "${ACTUAL_BB_VERSION}" in
+  "${BUSYBOX_VERSION}"*) ;;
+  *)
+    echo "[build-busybox] ERROR: source tree reports BusyBox ${ACTUAL_BB_VERSION}, expected ${BUSYBOX_VERSION}" >&2
+    exit 1
+    ;;
+esac
+echo "[build-busybox] Configuring BusyBox ${ACTUAL_BB_VERSION} (commit $(git -C "${SRC_DIR}" rev-parse HEAD))..."
 if [ ! -f "${SRC_DIR}/.config" ]; then
   make -C "${SRC_DIR}" HOSTCC=gcc CROSS_COMPILE=riscv64-linux-musl- defconfig
 fi

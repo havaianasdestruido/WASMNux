@@ -1,7 +1,6 @@
 //! RISC-V Supervisor Binary Interface (`SBI v2.0`) handler for S-mode `ecall` traps.
 
-use crate::bus::MachineBus;
-use crate::csr::SIE_SSIE;
+use crate::bus::{MachineBus, MAX_HARTS};
 use crate::trap::SystemResetAction;
 
 const SBI_EXT_LEGACY_SET_TIMER: u64 = 0x00;
@@ -25,6 +24,13 @@ const SBI_EXT_DBCN: u64 = 0x4442_434E; // "DBCN"
 const SBI_SUCCESS: i64 = 0;
 const SBI_ERR_NOT_SUPPORTED: i64 = -2;
 const SBI_ERR_INVALID_PARAM: i64 = -3;
+const SBI_ERR_ALREADY_STARTED: i64 = -6;
+
+/// Architectural HSM hart states reported by `sbi_hart_get_status` (SBI v1.0 §HSM).
+pub const HSM_STATE_STARTED: u64 = 0;
+pub const HSM_STATE_STOPPED: u64 = 1;
+pub const HSM_STATE_START_PENDING: u64 = 2;
+pub const HSM_STATE_STOP_PENDING: u64 = 3;
 
 #[derive(Clone, Debug, Default)]
 pub struct VirtualSbi {
@@ -36,14 +42,18 @@ impl VirtualSbi {
         Self { reset_action: None }
     }
 
-    /// Handle an S-mode `ecall`. Updates `regs[10]` (`a0` error) and `regs[11]` (`a1` value).
-    /// Returns `true` if TLB/ICache should be flushed.
+    /// Handle an S-mode `ecall` issued by hart `hart_id`. Updates `regs[10]` (`a0` error) and
+    /// `regs[11]` (`a1` value). Returns `true` if TLB/ICache should be flushed.
+    ///
+    /// `machine_hart` is used for the RFENCE/hart-mask helpers and `sip_ssip_set` carries a
+    /// supervisor software interrupt injection request to the caller (hart mask + level).
     pub fn handle_ecall(
         &mut self,
         regs: &mut [u64; 32],
         bus: &mut MachineBus,
-        sip_ssip_set: &mut Option<bool>,
+        sip_ssip_set: &mut Option<(u64, bool)>,
     ) -> bool {
+        let hart_id = bus.current_hart;
         let a0 = regs[10];
         let a1 = regs[11];
         let a2 = regs[12];
@@ -54,7 +64,7 @@ impl VirtualSbi {
 
         match eid {
             SBI_EXT_LEGACY_SET_TIMER => {
-                bus.clint.mtimecmp = a0;
+                bus.clint.mtimecmp[hart_id.min(MAX_HARTS - 1)] = a0;
                 regs[10] = 0;
             }
             SBI_EXT_LEGACY_CONSOLE_PUTCHAR => {
@@ -62,14 +72,14 @@ impl VirtualSbi {
                 regs[10] = 0;
             }
             SBI_EXT_LEGACY_CONSOLE_GETCHAR => {
-                regs[10] = (-1i64) as u64;
+                regs[10] = bus.uart.pop_input().map_or((-1i64) as u64, u64::from);
             }
             SBI_EXT_LEGACY_CLEAR_IPI => {
-                *sip_ssip_set = Some(false);
+                *sip_ssip_set = Some((u64::MAX, false));
                 regs[10] = 0;
             }
             SBI_EXT_LEGACY_SEND_IPI => {
-                *sip_ssip_set = Some(true);
+                *sip_ssip_set = Some((u64::MAX, true));
                 regs[10] = 0;
             }
             SBI_EXT_LEGACY_REMOTE_FENCE_I
@@ -110,7 +120,7 @@ impl VirtualSbi {
             }
             SBI_EXT_TIME => {
                 if fid == 0 {
-                    bus.clint.mtimecmp = a0;
+                    bus.clint.mtimecmp[hart_id.min(MAX_HARTS - 1)] = a0;
                     regs[10] = SBI_SUCCESS as u64;
                     regs[11] = 0;
                 } else {
@@ -120,7 +130,8 @@ impl VirtualSbi {
             }
             SBI_EXT_IPI => {
                 if fid == 0 {
-                    *sip_ssip_set = Some(true);
+                    // sbi_send_ipi(hart_mask = a0)
+                    *sip_ssip_set = Some((a0, true));
                     regs[10] = SBI_SUCCESS as u64;
                     regs[11] = 0;
                 } else {
@@ -129,21 +140,73 @@ impl VirtualSbi {
                 }
             }
             SBI_EXT_RFENCE => {
-                flush_caches = true;
-                regs[10] = SBI_SUCCESS as u64;
-                regs[11] = 0;
+                // sbi_remote_fence_i / sfence_vma / sfence_vma_asid: all harts share the
+                // emulator\'s single address-space cache, so a local flush is sufficient.
+                match fid {
+                    0..=2 => {
+                        flush_caches = true;
+                        regs[10] = SBI_SUCCESS as u64;
+                        regs[11] = 0;
+                    }
+                    _ => {
+                        regs[10] = SBI_ERR_NOT_SUPPORTED as u64;
+                        regs[11] = 0;
+                    }
+                }
             }
             SBI_EXT_HSM => {
                 match fid {
+                    // sbi_hart_start(hartid = a0, start_addr = a1, opaque = a2)
+                    0 => {
+                        let target = a0 as usize;
+                        if target >= bus.hart_count.min(MAX_HARTS) {
+                            regs[10] = SBI_ERR_INVALID_PARAM as u64;
+                        } else {
+                            let already_running =
+                                bus.hsm_requests.get(target).is_some_and(|r| r.started)
+                                    && !bus.hart_halt.get(target).copied().unwrap_or(false);
+                            if already_running {
+                                regs[10] = SBI_ERR_ALREADY_STARTED as u64;
+                            } else {
+                                if let Some(req) =
+                                    bus.hsm_requests.iter_mut().find(|r| r.hart_id == target)
+                                {
+                                    req.start_request = Some((a1, a2));
+                                    req.started = false;
+                                }
+                                bus.hart_halt[target] = false;
+                                bus.hart_scratch_targets[target] = Some(a2);
+                                regs[10] = SBI_SUCCESS as u64;
+                            }
+                        }
+                        regs[11] = 0;
+                    }
+                    // sbi_hart_stop()
+                    1 => {
+                        bus.hart_halt[hart_id.min(MAX_HARTS - 1)] = true;
+                        regs[10] = SBI_SUCCESS as u64;
+                        regs[11] = 0;
+                    }
+                    // sbi_hart_get_status(hartid = a0)
                     2 => {
-                        // hart_get_status: hart 0 is STARTED (0), any other hart INVALID_PARAM
-                        if a0 == 0 {
+                        let target = a0 as usize;
+                        if target < bus.hart_count.min(MAX_HARTS) {
+                            let status = if bus.hart_halt[target] {
+                                HSM_STATE_STOPPED
+                            } else {
+                                HSM_STATE_STARTED
+                            };
                             regs[10] = SBI_SUCCESS as u64;
-                            regs[11] = 0;
+                            regs[11] = status;
                         } else {
                             regs[10] = SBI_ERR_INVALID_PARAM as u64;
                             regs[11] = 0;
                         }
+                    }
+                    // sbi_hart_suspend(...)
+                    3 => {
+                        regs[10] = SBI_ERR_NOT_SUPPORTED as u64;
+                        regs[11] = 0;
                     }
                     _ => {
                         regs[10] = SBI_ERR_NOT_SUPPORTED as u64;
@@ -214,11 +277,18 @@ impl VirtualSbi {
                 }
             }
             _ => {
-                let _ = SIE_SSIE;
                 regs[10] = SBI_ERR_NOT_SUPPORTED as u64;
                 regs[11] = 0;
             }
         }
         flush_caches
     }
+}
+
+/// Per-hart HSM (SBI Hart State Management) bookkeeping shared between `RiscvMachine` and `Hart`.
+#[derive(Clone, Debug, Default)]
+pub struct HartHsmState {
+    pub hart_id: usize,
+    pub started: bool,
+    pub start_request: Option<(u64, u64)>,
 }

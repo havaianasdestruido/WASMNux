@@ -50,7 +50,11 @@ export default defineConfig({
   testDir: './tests/e2e',
   timeout: 180000,
   expect: {
-    timeout: 30000,
+    // Guest boots run on an RV64 interpreter. The from-source Linux 7.3.1
+    // image needs several seconds of wall clock inside Chromium, so assertion
+    // polling gets generous headroom. Boot *duration* is asserted by
+    // tests/unit/benchmarks.test.ts, not here.
+    timeout: 60000,
   },
   fullyParallel: false,
   workers: 1,

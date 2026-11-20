@@ -4,8 +4,9 @@ use crate::bus::MachineBus;
 use crate::csr::{
     CsrFile, CsrSnapshot, CSR_CYCLE, CSR_FCSR, CSR_INSTRET, CSR_MCAUSE, CSR_MEDELEG, CSR_MEPC,
     CSR_MIDELEG, CSR_MIE, CSR_MIP, CSR_MSTATUS, CSR_MTVAL, CSR_MTVEC, CSR_SATP, CSR_SCAUSE,
-    CSR_SEPC, CSR_STIMECMP, CSR_STVAL, CSR_STVEC, CSR_TIME, MISA_EXT_RV64GC, SIE_SEIE, SIE_SSIE,
-    SIE_STIE, SSTATUS_MXR, SSTATUS_SIE, SSTATUS_SPIE, SSTATUS_SPP, SSTATUS_SUM,
+    CSR_SEPC, CSR_STIMECMP, CSR_STVAL, CSR_STVEC, CSR_TIME, MISA_EXT_RV64GC, MSTATUS_MIE, SIE_MEIE,
+    SIE_MSIE, SIE_MSIP, SIE_MTIE, SIE_SEIE, SIE_SSIE, SIE_STIE, SSTATUS_MXR, SSTATUS_SIE,
+    SSTATUS_SPIE, SSTATUS_SPP, SSTATUS_SUM,
 };
 use crate::sbi::VirtualSbi;
 use crate::trap::{AccessType, PrivMode, SystemResetAction, Trap};
@@ -380,27 +381,48 @@ impl Hart {
         Ok(())
     }
 
-    /// Synchronize timer (`STIP` via CLINT or `Sstc` `stimecmp`) and external (`SEIP` via PLIC) interrupt lines.
+    /// Synchronize the architectural interrupt-pending lines of this hart:
+    /// `STIP` (CLINT/sstc timer), `SEIP` (this hart\'s PLIC S-mode context), `MEIP` (this hart\'s
+    /// PLIC M-mode context) and `MSIP` (CLINT software IPI targeting this hart).
     #[inline]
     pub fn sync_interrupt_lines(&mut self, bus: &MachineBus) {
+        self.sync_interrupt_lines_with_ipi(bus, None);
+    }
+
+    /// Same as [`Hart::sync_interrupt_lines`] with an optional host-injected supervisor software
+    /// interrupt level applied to `sip.SSIP` (used by the guest IPI bridge).
+    #[inline]
+    pub fn sync_interrupt_lines_with_ipi(&mut self, bus: &MachineBus, ssip_inject: Option<bool>) {
         let mtime = bus.clint.mtime;
         self.csrs.set_time(mtime);
         let stimecmp = self.csrs.read_raw(CSR_STIMECMP);
-        let timer_due = bus.clint.timer_due() || mtime >= stimecmp;
+        let timer_due = bus.clint.timer_due(self.hart_id) || mtime >= stimecmp;
         self.csrs.set_mip_bit(SIE_STIE, timer_due);
+        self.csrs.set_mip_bit(
+            SIE_SEIE,
+            bus.plic.supervisor_external_pending_for(self.hart_id),
+        );
+        self.csrs.set_mip_bit(
+            SIE_MEIE,
+            bus.plic.machine_external_pending_for(self.hart_id),
+        );
         self.csrs
-            .set_mip_bit(SIE_SEIE, bus.plic.supervisor_external_pending());
+            .set_mip_bit(SIE_MSIP, bus.clint.msip_for(self.hart_id) != 0);
+        if let Some(active) = ssip_inject {
+            self.csrs.set_mip_bit(SIE_SSIE, active);
+        }
     }
 
+    /// Select the highest-priority pending interrupt that is currently enabled and eligible for
+    /// the hart\'s privilege mode: delegated bits are taken in S-mode, everything else in M-mode.
     fn check_pending_interrupt(&mut self) -> Option<u64> {
         let pending = self.csrs.read_raw(CSR_MIP) & self.csrs.read_raw(CSR_MIE);
         if pending == 0 {
             return None;
         }
-        if pending != 0 {
-            self.wfi = false;
-        }
+        self.wfi = false;
 
+        // Supervisor-visible interrupts (delegated through medeleg/mideleg).
         let s_deleg = self.csrs.read_raw(CSR_MIDELEG);
         let s_pending = pending & s_deleg;
         if s_pending != 0 {
@@ -419,6 +441,21 @@ impl Hart {
                 if (s_pending & SIE_STIE) != 0 {
                     return Some((1u64 << 63) | 5);
                 }
+            }
+        }
+
+        // Machine-mode interrupts (not delegated, or taken while executing in M-mode).
+        let m_enabled = (self.csrs.read_raw(CSR_MSTATUS) & MSTATUS_MIE) != 0;
+        if m_enabled {
+            let m_pending = pending & !s_deleg;
+            if (m_pending & SIE_MEIE) != 0 {
+                return Some((1u64 << 63) | 11);
+            }
+            if (m_pending & SIE_MTIE) != 0 {
+                return Some((1u64 << 63) | 7);
+            }
+            if (m_pending & SIE_MSIE) != 0 {
+                return Some((1u64 << 63) | 3);
             }
         }
         None
@@ -528,7 +565,20 @@ impl Hart {
 
     /// Run up to `max_steps` instructions (or until WFI idle or system reset).
     pub fn run_slice(&mut self, bus: &mut MachineBus, max_steps: usize) -> (usize, StepOutcome) {
+        self.run_slice_with_ipi(bus, max_steps, None)
+    }
+
+    /// Run up to `max_steps` instructions like [`Hart::run_slice`], applying an optional
+    /// supervisor software-interrupt injection level (`sip.SSIP`) before the slice starts.
+    pub fn run_slice_with_ipi(
+        &mut self,
+        bus: &mut MachineBus,
+        max_steps: usize,
+        ssip_inject: Option<bool>,
+    ) -> (usize, StepOutcome) {
         let mut executed = 0usize;
+        bus.current_hart = self.hart_id;
+        self.sync_interrupt_lines_with_ipi(bus, ssip_inject);
         while executed < max_steps {
             if let Some(action) = bus
                 .syscon
@@ -548,7 +598,7 @@ impl Hart {
             } else if self.wfi {
                 // Fast-forward mtime toward next timer deadline up to remaining budget, or yield to Worker.
                 let stimecmp = self.csrs.read_raw(CSR_STIMECMP);
-                let clint_due = bus.clint.ticks_until_due();
+                let clint_due = bus.clint.ticks_until_due(self.hart_id);
                 let sstc_due = if stimecmp == u64::MAX {
                     None
                 } else {
@@ -589,8 +639,17 @@ impl Hart {
                     let flush = self
                         .sbi
                         .handle_ecall(&mut self.regs, bus, &mut sip_ssip_set);
-                    if let Some(active) = sip_ssip_set {
-                        self.csrs.set_mip_bit(SIE_SSIE, active);
+                    if let Some((mask, active)) = sip_ssip_set {
+                        // Guest IPI: deliver `sip.SSIP` to every hart selected by the mask
+                        // (a `u64::MAX` mask from the legacy calls means \"this hart\").
+                        if mask == u64::MAX {
+                            self.csrs.set_mip_bit(SIE_SSIE, active);
+                        } else {
+                            if (mask & (1u64 << self.hart_id)) != 0 {
+                                self.csrs.set_mip_bit(SIE_SSIE, active);
+                            }
+                            bus.ipi_pending = Some((mask, active));
+                        }
                     }
                     if flush {
                         self.flush_tlb();

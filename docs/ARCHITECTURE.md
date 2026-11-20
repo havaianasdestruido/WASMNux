@@ -5,6 +5,7 @@
 At project start (`c0237518262da49dd1941669eb47ff8d9e398e16`), `/home/user/WASMNux` contained only an Apache-2.0 `LICENSE` file and an initialized Git repository on branch `arena/5741c179-wasmnux`. No prior Rust, TypeScript, WebAssembly, or Linux artifacts existed.
 
 Host build environment baseline:
+
 - **Host OS:** Debian GNU/Linux 12 (`x86_64`), Linux `6.1.158+`, 2 vCPUs, 3.8 GiB RAM, 20 GiB free disk.
 - **Preinstalled Host Tools:** `gcc 12.2.0`, `make 4.3`, `perl 5.36`, `python3 3.11.2`, `node v22.22.3`, `npm 10.9.8`, `e2fsprogs 1.47.0` (`/usr/sbin/mke2fs`, `/usr/sbin/debugfs`, `/usr/sbin/e2fsck`), `dpkg-deb` & `dpkg-scanpackages 1.21.23`, `git`, `gh`.
 - **Provisioned Build Toolchains (`scripts/setup-toolchains.sh`):**
@@ -32,12 +33,12 @@ WebAssembly (`wasm32`) is a Harvard-architecture, stack-based virtual ISA withou
 
 ### 3.1 Candidate Guest CPU Architectures
 
-| Architecture | Upstream Linux `7.3.1` Support | Official Debian `13.7 ("trixie")` Status | Emulator Complexity in Rust/WASM | Verdict |
-|---|---|---|---|---|
-| **`riscv64` (`RV64GC` / `lp64d`)** | First-class (`arch/riscv`) | **Official release architecture** (added as first-class in Debian 13; official rootfs in `debuerreotype/docker-debian-artifacts` `dist-riscv64`) | Clean, orthogonal fixed/compressed ISA (`RV64IMAFDC`), well-defined `Sv39` 3-level MMU, SBI firmware interface, VirtIO MMIO | **SELECTED** |
-| `i386` (32-bit x86) | Legacy (`arch/x86`) | **Dropped as regular architecture in Debian 13** ("no official kernel and no Debian installer; partial legacy userland only") | Complex x86 segmentation, GDT/IDT/TSS, PIC/APIC, legacy PC I/O ports | Rejected (fails full official Debian 13 arch standard) |
-| `amd64` (`x86_64`) | First-class (`arch/x86`) | Official release architecture | Very high decoding/JIT complexity, 4-level paging + x87/SSE2/AVX + ACPI/APIC; no mature pure-Rust browser-WASM `x86_64` system emulator exists | Rejected |
-| `arm64` (`aarch64`) | First-class (`arch/arm64`) | Official release architecture | Large A64 ISA surface + GICv3 + ARM timer/PSCI complexity in pure WASM interpreter | Rejected in favor of `riscv64` |
+| Architecture                       | Upstream Linux `7.3.1` Support | Official Debian `13.7 ("trixie")` Status                                                                                                         | Emulator Complexity in Rust/WASM                                                                                                               | Verdict                                                |
+| ---------------------------------- | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| **`riscv64` (`RV64GC` / `lp64d`)** | First-class (`arch/riscv`)     | **Official release architecture** (added as first-class in Debian 13; official rootfs in `debuerreotype/docker-debian-artifacts` `dist-riscv64`) | Clean, orthogonal fixed/compressed ISA (`RV64IMAFDC`), well-defined `Sv39` 3-level MMU, SBI firmware interface, VirtIO MMIO                    | **SELECTED**                                           |
+| `i386` (32-bit x86)                | Legacy (`arch/x86`)            | **Dropped as regular architecture in Debian 13** ("no official kernel and no Debian installer; partial legacy userland only")                    | Complex x86 segmentation, GDT/IDT/TSS, PIC/APIC, legacy PC I/O ports                                                                           | Rejected (fails full official Debian 13 arch standard) |
+| `amd64` (`x86_64`)                 | First-class (`arch/x86`)       | Official release architecture                                                                                                                    | Very high decoding/JIT complexity, 4-level paging + x87/SSE2/AVX + ACPI/APIC; no mature pure-Rust browser-WASM `x86_64` system emulator exists | Rejected                                               |
+| `arm64` (`aarch64`)                | First-class (`arch/arm64`)     | Official release architecture                                                                                                                    | Large A64 ISA surface + GICv3 + ARM timer/PSCI complexity in pure WASM interpreter                                                             | Rejected in favor of `riscv64`                         |
 
 ### 3.2 Audit of Existing Open-Source Virtualization Engines
 
@@ -71,18 +72,18 @@ We adopt and adapt the Apache-2.0 `RV64IMAFDC` CPU/CSR/CLINT/PLIC/FDT core conce
 
 ## 4. Virtual Machine Physical Memory Map (`riscv64` `virt`-Compatible)
 
-| Physical Address Range | Size | Device / Subsystem | IRQ / Interface |
-|---|---|---|---|
-| `0x0010_0000 .. 0x0010_0FFF` | 4 KiB | `sifive_test` / `syscon` (`0x5555` poweroff, `0x7777` reboot) | MMIO |
-| `0x0010_1000 .. 0x0010_1FFF` | 4 KiB | `google,goldfish-rtc` wall-clock UTC Real-Time Clock | MMIO |
-| `0x0200_0000 .. 0x0200_FFFF` | 64 KiB | `riscv,clint0` Core-Local Interruptor (`msip`, `mtimecmp`, `mtime`) | Timer / IPI |
-| `0x0C00_0000 .. 0x0FFF_FFFF` | 64 MiB | `sifive,plic-1.0.0` Platform-Level Interrupt Controller | `SEIP` |
-| `0x1000_0000 .. 0x1000_00FF` | 256 B | `ns16550a` Serial Console UART (`/dev/ttyS0`) | PLIC IRQ `10` |
-| `0x1000_1000 .. 0x1000_1FFF` | 4 KiB | `virtio,mmio` v2 Block Device (`VirtioBlk` `/dev/vda`) | PLIC IRQ `1` |
-| `0x1000_2000 .. 0x1000_2FFF` | 4 KiB | `virtio,mmio` v2 Network NIC (`VirtioNet` `eth0`) | PLIC IRQ `2` |
-| `0x1000_3000 .. 0x1000_3FFF` | 4 KiB | `virtio,mmio` v2 Hardware RNG (`VirtioRng` `/dev/hwrng`) | PLIC IRQ `3` |
-| `0x5000_0000 .. 0x500F_FFFF` | 1 MiB | `simple-framebuffer` (`640x400x4`, `x8r8g8b8`, `/dev/fb0` + `fbcon`) | Dirty-scanline VRAM |
-| `0x8000_0000 .. 0x8000_0000 + RAM` | 128–512 MiB | Main Guest DRAM (Kernel `Image` @ `0x8020_0000`, Initrd & FDT near top) | Cached RAM |
+| Physical Address Range             | Size        | Device / Subsystem                                                      | IRQ / Interface     |
+| ---------------------------------- | ----------- | ----------------------------------------------------------------------- | ------------------- |
+| `0x0010_0000 .. 0x0010_0FFF`       | 4 KiB       | `sifive_test` / `syscon` (`0x5555` poweroff, `0x7777` reboot)           | MMIO                |
+| `0x0010_1000 .. 0x0010_1FFF`       | 4 KiB       | `google,goldfish-rtc` wall-clock UTC Real-Time Clock                    | MMIO                |
+| `0x0200_0000 .. 0x0200_FFFF`       | 64 KiB      | `riscv,clint0` Core-Local Interruptor (`msip`, `mtimecmp`, `mtime`)     | Timer / IPI         |
+| `0x0C00_0000 .. 0x0FFF_FFFF`       | 64 MiB      | `sifive,plic-1.0.0` Platform-Level Interrupt Controller                 | `SEIP`              |
+| `0x1000_0000 .. 0x1000_00FF`       | 256 B       | `ns16550a` Serial Console UART (`/dev/ttyS0`)                           | PLIC IRQ `10`       |
+| `0x1000_1000 .. 0x1000_1FFF`       | 4 KiB       | `virtio,mmio` v2 Block Device (`VirtioBlk` `/dev/vda`)                  | PLIC IRQ `1`        |
+| `0x1000_2000 .. 0x1000_2FFF`       | 4 KiB       | `virtio,mmio` v2 Network NIC (`VirtioNet` `eth0`)                       | PLIC IRQ `2`        |
+| `0x1000_3000 .. 0x1000_3FFF`       | 4 KiB       | `virtio,mmio` v2 Hardware RNG (`VirtioRng` `/dev/hwrng`)                | PLIC IRQ `3`        |
+| `0x5000_0000 .. 0x500F_FFFF`       | 1 MiB       | `simple-framebuffer` (`640x400x4`, `x8r8g8b8`, `/dev/fb0` + `fbcon`)    | Dirty-scanline VRAM |
+| `0x8000_0000 .. 0x8000_0000 + RAM` | 128–512 MiB | Main Guest DRAM (Kernel `Image` @ `0x8020_0000`, Initrd & FDT near top) | Cached RAM          |
 
 ---
 
@@ -121,18 +122,21 @@ We adopt and adapt the Apache-2.0 `RV64IMAFDC` CPU/CSR/CLINT/PLIC/FDT core conce
 ```
 
 ### 5.1 Linux Profiles & Provenance
+
 1. **Vanilla Linux Profile:**
    - **Kernel:** Official upstream Linux stable **`7.3.1`** (`git://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git`, mirrored at `github.com/gregkh/linux`, tag `v7.3.1`, commit `dfc1145bbaa1c5dd626fd25d9ae8fc277864e7bd`), compiled from C source with Clang/LLVM 23.1.3 (`ARCH=riscv`).
-   - **Userspace:** Official BusyBox **`1.36.1`** (`github.com/mirror/busybox` tag `1_36_1`), compiled statically for `riscv64-linux-musl` (`RV64GC` `lp64d`) with custom `/init` and an automatic `ext4` persistent disk (`/dev/vda`) mounted for durable `/root`, `/home`, and `/etc/persist` state.
+   - **Userspace:** Official BusyBox **`1.37.0`** (built from `github.com/mirror/busybox` trunk, commit pinned in `scripts/build-busybox.sh`), compiled statically for `riscv64-linux-musl` (`RV64GC` `lp64d`) with custom `/init` and an automatic `ext4` persistent disk (`/dev/vda`) mounted for durable `/root`, `/home`, and `/etc/persist` state.
 2. **Debian Profile:**
    - **Distribution:** Official **Debian GNU/Linux `13.7` (`"trixie"`) `riscv64`** from Debian's official reproducible rootfs artifact repository (`github.com/debuerreotype/docker-debian-artifacts`, branch `dist-riscv64`, `DEBIAN_VERSION_FULL=13.7`), including `glibc 2.41`, `bash 5.2.37`, `coreutils 9.7`, `apt 3.0.3`, `dpkg 1.22.22`, plus `busybox` `riscv64`.
    - **Package Management:** Backed by a genuine `ext4` root filesystem on `/dev/vda` and a real standards-compliant `riscv64` Debian APT repository (`/debian-repo/dists/trixie/...`) served over `VirtioNet` (`eth0` -> Rust TCP/IP -> Browser `fetch` bridge), supporting real `apt update`, `apt-cache search/show`, `apt install`, `dpkg -l/-s/-L`, and `apt remove`, with full offline usability and cross-reload persistence.
 
 ### 5.2 Persistent Storage Design
+
 - **Base vs. Overlay Separation:** Read-only compressed base disk images live in HTTP/PWA cache (`/images/*.gz`); per-profile mutable blocks (`64 KiB` chunks) live exclusively in **OPFS** (`/wasmnux/profiles/<profileId>/`) and **IndexedDB** (`wasmnux-storage-v1`).
 - **Crash-Consistent Two-Phase Commit Journal:** Updates write chunk payloads + CRC32 checksums into staging slots first, then atomically flip the active commit generation record in metadata. Interrupted sessions automatically discard uncommitted partial writes and recover the last verified generation.
 
 ### 5.3 WebGPU Framebuffer Pipeline & Fallback
+
 - **WebGPU Mode:** Acquires `GPUAdapter` + `GPUDevice`, uploads dirty guest VRAM scanlines (`XRGB8888` at `0x5000_0000` driven by Linux `simplefb` + `fbcon` `/dev/fb0`) to a storage buffer, executes a **WGSL `@compute` shader** performing GPU color-channel swizzling (`BGRX -> RGBA8`), alpha normalization, and optional CRT scanline filtering into an `rgba8unorm` storage texture, and presents via a **WGSL `@vertex`/`@fragment` pipeline** with `device.lost` recovery.
 - **Fallback Mode:** `Canvas2DRenderer` converts dirty scanlines into `ImageData` and renders via `ctx.putImageData()`, ensuring full usability when WebGPU is absent or disabled.
 
@@ -143,18 +147,18 @@ We adopt and adapt the Apache-2.0 `RV64IMAFDC` CPU/CSR/CLINT/PLIC/FDT core conce
 1. **Browser Sandbox Networking:** Browsers prohibit raw L2/L3 sockets, raw ICMP, and arbitrary outbound TCP sockets. Our `wasmnux-net` stack terminates Ethernet/ARP/ICMP/DHCP/DNS/TCP inside WASM and bridges HTTP requests via browser `fetch()` (subject to CORS for external servers unless routed through an optional WebSocket proxy). Same-origin `/debian-repo` works out-of-the-box with zero external proxy needed.
 2. **Interpreter Throughput vs. Hardware KVM:** WebAssembly does not expose host hardware virtualization (`KVM`) or executable RWX memory mappings in standard linear memory without dynamic WASM module compilation. Our cached RV64GC interpreter + software TLB + `WFI` fast-forward achieves responsive interactive shells and sub-few-second boots, but CPU-bound compilation workloads are slower than native KVM.
 3. **WebGPU Scope:** WebGPU accelerates guest framebuffer conversion, scaling, and presentation (`/dev/fb0`), not guest OpenGL/Vulkan 3D command-stream passthrough.
-4. **Browser Storage Eviction:** Unless `navigator.storage.persist()` is granted by the browser, OPFS and IndexedDB remain subject to browser LRU origin eviction under extreme host disk pressure; the UI explicitly probes and displays persistence grant status and quota usage.
-5. **Build-Time Egress Environment:** In the build sandbox, direct egress is restricted to GitHub, npm, and PyPI hosts (`busybox.net` and `deb.debian.org` are unreachable directly from build scripts). Accordingly, kernel `7.3.1` is built from official `gregkh/linux` on GitHub, Debian `13.7` rootfs is retrieved from official `debuerreotype/docker-debian-artifacts` on GitHub, BusyBox `1.36.1` is built from official `mirror/busybox` on GitHub, and installable `riscv64` `.deb` repository packages are built reproducibly from real C sources using `zig cc` + `dpkg-deb` + `dpkg-scanpackages`.
+4. **Browser Storage Eviction:** Unless `navigator.storage.persist()` is granted by the browser, OPFS and IndexedDB remain subject to browser LRU origin eviction under extreme host disk pressure; the UI explicitly probes and displays persistence grant status and quota usage. Storage writes are serialised per profile through the Web Locks API (`wasmnux-profile-<id>`), so two tabs on one profile cannot interleave a commit; when Web Locks are unavailable the engine falls back to a direct call, and `inspectQuotaHealth()` reports which mechanism is actually in use. A refused write is normalised into a typed `quota_exceeded` error rather than leaking the raw `DOMException` — which, notably, is not an `instanceof Error` in Chromium and therefore cannot be detected by type alone. The OPFS capability probe uses a unique filename per probe so two tabs booting concurrently cannot delete each other's probe file and silently downgrade to `idb-only`.
+5. **Build-Time Egress Environment:** In the build sandbox, direct egress is restricted to GitHub, npm, and PyPI hosts (`busybox.net` and `deb.debian.org` are unreachable directly from build scripts). Accordingly, kernel `7.3.1` is built from official `gregkh/linux` on GitHub, Debian `13.7` rootfs is retrieved from official `debuerreotype/docker-debian-artifacts` on GitHub, BusyBox `1.37.0` is built from official `mirror/busybox` on GitHub, and installable `riscv64` `.deb` repository packages are built reproducibly from real C sources using `zig cc` + `dpkg-deb` + `dpkg-scanpackages`. Because that sandbox has no package manager, `scripts/build-kernel.sh` does not assume flex, bison, or bc: when they are absent it resolves the configuration with `scripts/gen-kconfig.py` (kconfiglib, pure Python) and generates `timeconst.h` with `scripts/gen-timeconst.py`, producing the same generated files `make syncconfig` would.
 
 ---
 
 ## 7. Acceptance Criteria & Verification Matrix
 
-| Requirement Area | Acceptance Standard | Verification Suite |
-|---|---|---|
-| Rust Virtualization Core | Zero clippy warnings, formatted, `RV64IMAFDC` + `Sv39` MMU + VirtIO + Net + Storage unit & mini-OS tests pass | `cargo fmt --check`, `cargo clippy -D warnings`, `cargo test --workspace` |
-| WASM Runtime & Worker | Compiles to `wasm32-unknown-unknown`, strict TS types, zero UI-thread blocking, structured errors | `scripts/build-wasm.sh`, `npm run typecheck`, `npm run lint`, Vitest WASM tests |
-| Vanilla Linux `7.3.1` | Upstream `7.3.1` boots to shell; all 35+ BusyBox applets behaviorally verified; `/dev/vda` `ext4` persists | Rust/Vitest VM boot & applet suite + Playwright E2E |
-| Debian `13.7` (`trixie`) | Official `13.7` `riscv64` boots; `bash`, `BusyBox`, `dpkg`, `apt update/install/remove` verified & persistent | Vitest Debian integration suite + Playwright E2E |
-| Persistent Storage | Survives page reload & browser restart; crash journal recovery; snapshots; import/export; quota handling | Storage fault-injection unit tests + Playwright persistent-context tests |
-| WebGPU & Fallback | Real WGSL compute+render pipeline + `device.lost` recovery + Canvas 2D fallback verified | Renderer unit tests + Playwright WebGPU-on / WebGPU-off tests |
+| Requirement Area         | Acceptance Standard                                                                                           | Verification Suite                                                              |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| Rust Virtualization Core | Zero clippy warnings, formatted, `RV64IMAFDC` + `Sv39` MMU + VirtIO + Net + Storage unit & mini-OS tests pass | `cargo fmt --check`, `cargo clippy -D warnings`, `cargo test --workspace`       |
+| WASM Runtime & Worker    | Compiles to `wasm32-unknown-unknown`, strict TS types, zero UI-thread blocking, structured errors             | `scripts/build-wasm.sh`, `npm run typecheck`, `npm run lint`, Vitest WASM tests |
+| Vanilla Linux `7.3.1`    | Upstream `7.3.1` boots to shell; all 35+ BusyBox applets behaviorally verified; `/dev/vda` `ext4` persists    | Rust/Vitest VM boot & applet suite + Playwright E2E                             |
+| Debian `13.7` (`trixie`) | Official `13.7` `riscv64` boots; `bash`, `BusyBox`, `dpkg`, `apt update/install/remove` verified & persistent | Vitest Debian integration suite + Playwright E2E                                |
+| Persistent Storage       | Survives page reload & browser restart; crash journal recovery; snapshots; import/export; quota handling      | Storage fault-injection unit tests + Playwright persistent-context tests        |
+| WebGPU & Fallback        | Real WGSL compute+render pipeline + `device.lost` recovery + Canvas 2D fallback verified                      | Renderer unit tests + Playwright WebGPU-on / WebGPU-off tests                   |

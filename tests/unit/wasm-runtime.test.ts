@@ -18,7 +18,7 @@ const WASM_BYTES = readFileSync(WASM_PATH);
 describe('WASM Runtime Bindings & Worker Bridge (Phase 3)', () => {
   it('loads compiled wasmnux_wasm.wasm and enforces strict validation bounds', async () => {
     const rt = await WasmVmRuntime.fromBytes(WASM_BYTES);
-    expect(rt.abiVersion).toBe(1);
+    expect(rt.abiVersion).toBe(2);
     expect(rt.linearMemoryBytes).toBeGreaterThanOrEqual(65536);
 
     // Invalid profile ID rejected with typed VmRuntimeError
@@ -49,6 +49,40 @@ describe('WASM Runtime Bindings & Worker Bridge (Phase 3)', () => {
       vm.importDiskBundle(new Uint8Array([9, 9, 9]));
     }).toThrow(VmRuntimeError);
     vm.destroy();
+  });
+
+  it('exposes the configured hart count and rejects out-of-range SMP configurations', async () => {
+    const rt = await WasmVmRuntime.fromBytes(WASM_BYTES);
+
+    const unicore = rt.createVm({ profileId: 'vanilla', ramMib: 16, diskMib: 4 });
+    expect(unicore.hartCount).toBe(1);
+    expect(unicore.getTelemetry().hartCount).toBe(1);
+    unicore.destroy();
+    expect(unicore.hartCount).toBe(0);
+
+    const smp = rt.createVm({ profileId: 'vanilla', ramMib: 32, diskMib: 4, hartCount: 4 });
+    expect(smp.hartCount).toBe(4);
+    expect(smp.getTelemetry().hartCount).toBe(4);
+
+    // A 4-hart VM still boots and step-advances the guest Linux image on hart 0.
+    const kernel = buildRiscvMiniSmokeKernel('SMP-OK');
+    smp.stageKernel(kernel);
+    smp.boot('console=ttyS0');
+    const decoder = new TextDecoder();
+    let serial = '';
+    for (let i = 0; i < 400 && !serial.includes('SMP-OK'); i += 1) {
+      smp.step(2_000);
+      serial += decoder.decode(smp.drainSerialOutput(), { stream: true });
+    }
+    expect(serial).toContain('SMP-OK');
+    smp.destroy();
+
+    // 0 and 9 harts are outside [1, 8] and must be rejected with a typed error.
+    for (const hartCount of [0, 9]) {
+      expect(() =>
+        rt.createVm({ profileId: 'vanilla', ramMib: 16, diskMib: 4, hartCount }),
+      ).toThrow(VmRuntimeError);
+    }
   });
 
   it('survives multi-cycle init -> boot -> snapshot -> restore -> destroy without leaks', async () => {

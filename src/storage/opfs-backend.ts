@@ -44,6 +44,18 @@ function parseChunkFilename(name: string): { chunkIndex: number; generation: num
   return { chunkIndex: cIdx, generation: gen };
 }
 
+/**
+ * `NotFoundError`/`TypeMismatchError` are raised transiently by Chromium when a concurrent tab (or
+ * task) mutates the same OPFS directory tree; they are safe to retry.
+ */
+export function isOpfsTransientError(err: unknown): boolean {
+  if (typeof err !== 'object' || err === null) {
+    return false;
+  }
+  const name = (err as { readonly name?: unknown }).name;
+  return name === 'NotFoundError' || name === 'TypeMismatchError';
+}
+
 export class OpfsChunkBackend {
   private rootDirPromise: Promise<FileSystemDirectoryHandle> | null = null;
 
@@ -51,34 +63,68 @@ export class OpfsChunkBackend {
     if (typeof navigator === 'undefined' || typeof navigator.storage.getDirectory !== 'function') {
       return false;
     }
+    // The probe file name must be unique per probe: two tabs booting at the same moment would
+    // otherwise race on one shared `.opfs-probe` entry (one tab deletes the file the other is
+    // writing), which silently downgraded a tab to `idb-only`.
+    const probeName = `.opfs-probe-${Math.random().toString(36).slice(2)}${String(Date.now())}`;
     try {
       const root = await navigator.storage.getDirectory();
       const probeDir = await root.getDirectoryHandle(OPFS_ROOT_DIR, { create: true });
-      const probeFile = await probeDir.getFileHandle('.opfs-probe', { create: true });
+      const probeFile = await probeDir.getFileHandle(probeName, { create: true });
       if (typeof probeFile.createWritable !== 'function') {
         return false;
       }
       const w = await probeFile.createWritable();
       await w.write(new Uint8Array([0x57, 0x4e]));
       await w.close();
-      await probeDir.removeEntry('.opfs-probe');
       return true;
     } catch {
       return false;
+    } finally {
+      try {
+        const root = await navigator.storage.getDirectory();
+        const probeDir = await root.getDirectoryHandle(OPFS_ROOT_DIR, { create: false });
+        await probeDir.removeEntry(probeName);
+      } catch {
+        // Best effort; an orphaned probe file is inert.
+      }
     }
+  }
+
+  /**
+   * Retry OPFS handle creation a few times.
+   *
+   * Chromium/OPFS may transiently report `NotFoundError` while another tab (or another concurrent
+   * task in this tab) is creating/removing entries in the same directory tree. Retrying is the
+   * documented remedy, and it is what makes two tabs able to share one origin safely.
+   */
+  private async withOpfsRetry<T>(fn: () => Promise<T>, attempts = 5): Promise<T> {
+    let lastErr: unknown = null;
+    for (let attempt = 0; attempt < attempts; attempt += 1) {
+      try {
+        return await fn();
+      } catch (err: unknown) {
+        lastErr = err;
+        if (!isOpfsTransientError(err)) {
+          throw err;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 10 * (attempt + 1)));
+      }
+    }
+    throw lastErr;
   }
 
   private async getProfileDir(profileId: string): Promise<FileSystemDirectoryHandle> {
     validateStorageIdentifier(profileId);
     if (this.rootDirPromise === null) {
-      this.rootDirPromise = (async () => {
+      this.rootDirPromise = this.withOpfsRetry(async () => {
         const navRoot = await navigator.storage.getDirectory();
         const appRoot = await navRoot.getDirectoryHandle(OPFS_ROOT_DIR, { create: true });
         return appRoot.getDirectoryHandle('profiles', { create: true });
-      })();
+      });
     }
     const profilesDir = await this.rootDirPromise;
-    return profilesDir.getDirectoryHandle(profileId, { create: true });
+    return this.withOpfsRetry(() => profilesDir.getDirectoryHandle(profileId, { create: true }));
   }
 
   public async writeChunk(
@@ -184,28 +230,35 @@ export class OpfsChunkBackend {
   public async listChunkFiles(
     profileId: string,
   ): Promise<ReadonlyArray<{ chunkIndex: number; generation: number }>> {
-    const dir = await this.getProfileDir(profileId);
-    const out: Array<{ chunkIndex: number; generation: number }> = [];
-    const iterableDir = dir as unknown as AsyncIterable<[string, FileSystemHandle]>;
-    for await (const [name, handle] of iterableDir) {
-      if (handle.kind === 'file') {
-        const parsed = parseChunkFilename(name);
-        if (parsed !== null) {
-          out.push(parsed);
+    // Directory iteration can raise `NotFoundError` if another tab simultaneously creates or
+    // removes entries in the same tree, so the whole scan is retried.
+    return this.withOpfsRetry(async () => {
+      const dir = await this.getProfileDir(profileId);
+      const out: Array<{ chunkIndex: number; generation: number }> = [];
+      const iterableDir = dir as unknown as AsyncIterable<[string, FileSystemHandle]>;
+      for await (const [name, handle] of iterableDir) {
+        if (handle.kind === 'file') {
+          const parsed = parseChunkFilename(name);
+          if (parsed !== null) {
+            out.push(parsed);
+          }
         }
       }
-    }
-    return out;
+      return out;
+    });
   }
 
   public async clearProfile(profileId: string): Promise<void> {
     validateStorageIdentifier(profileId);
     const dir = await this.getProfileDir(profileId);
-    const names: string[] = [];
-    const iterableDir = dir as unknown as AsyncIterable<[string, FileSystemHandle]>;
-    for await (const [name] of iterableDir) {
-      names.push(name);
-    }
+    const names: string[] = await this.withOpfsRetry(async () => {
+      const collected: string[] = [];
+      const iterableDir = dir as unknown as AsyncIterable<[string, FileSystemHandle]>;
+      for await (const [name] of iterableDir) {
+        collected.push(name);
+      }
+      return collected;
+    });
     for (const name of names) {
       try {
         await dir.removeEntry(name, { recursive: true });

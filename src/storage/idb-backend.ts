@@ -66,6 +66,43 @@ function promisifyRequest<T>(req: IDBRequest<T>): Promise<T> {
   });
 }
 
+/**
+ * Detect the browser's real out-of-space condition. Chrome/Firefox raise a `DOMException` named
+ * `QuotaExceededError` (legacy code `22` / `1014`), and some engines surface it as
+ * `NS_ERROR_DOM_QUOTA_REACHED`. Anything else is rethrown untouched.
+ */
+export function isQuotaExceededError(err: unknown): boolean {
+  // `DOMException` is a separate class in Chromium and is *not* `instanceof Error`, so structural
+  // inspection is required here (a real OPFS quota refusal surfaces exactly like this).
+  if (typeof err !== 'object' || err === null) {
+    return false;
+  }
+  const record = err as { readonly name?: unknown; readonly code?: unknown };
+  const name = typeof record.name === 'string' ? record.name : '';
+  const domCode = typeof record.code === 'number' ? record.code : -1;
+  return (
+    name === 'QuotaExceededError' ||
+    name === 'NS_ERROR_DOM_QUOTA_REACHED' ||
+    domCode === 22 ||
+    domCode === 1014
+  );
+}
+
+/** Map a storage-layer failure onto the engine's typed error vocabulary. */
+export function normalizeStorageError(err: unknown, context: string): unknown {
+  if (isQuotaExceededError(err)) {
+    const detail =
+      typeof (err as { readonly message?: unknown }).message === 'string'
+        ? (err as { readonly message?: string }).message
+        : '';
+    return new StorageValidationError(
+      'quota_exceeded',
+      `${context}: browser storage quota exhausted${detail ? ` (${detail})` : ''}`,
+    );
+  }
+  return err;
+}
+
 function promisifyTx(tx: IDBTransaction): Promise<void> {
   return new Promise((resolve, reject) => {
     tx.oncomplete = (): void => {
@@ -166,9 +203,13 @@ export class IdbStorageBackend {
       data: data.slice(),
     };
     const db = await this.openDb();
-    const tx = db.transaction(STORE_CHUNKS, 'readwrite');
-    tx.objectStore(STORE_CHUNKS).put(row);
-    await promisifyTx(tx);
+    try {
+      const tx = db.transaction(STORE_CHUNKS, 'readwrite');
+      tx.objectStore(STORE_CHUNKS).put(row);
+      await promisifyTx(tx);
+    } catch (err: unknown) {
+      throw normalizeStorageError(err, `commit chunk ${String(chunkIndex)}`);
+    }
     return checksum;
   }
 
