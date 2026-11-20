@@ -1,0 +1,181 @@
+### /tmp/wasmnux-cargo-fmt.log (full)
+### /tmp/wasmnux-cargo-check.log
+### /tmp/wasmnux-cargo-clippy.log
+### /tmp/wasmnux-cargo-test.log
+10:test tests::internet_checksum_verifies_rfc1071_vector ... ok
+11:test tests::resolves_dns_and_streams_multi_segment_tcp_http_response ... ok
+12:test tests::responds_to_arp_and_icmp_echo_for_gateway ... ok
+13-
+14:test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+15-
+16-     Running unittests src/lib.rs (target/debug/deps/wasmnux_riscv-4401b300ca42795e)
+17-
+18-running 11 tests
+19:test tests::checked_offset_rejects_overflow_and_out_of_bounds ... ok
+20:test tests::executes_rv64imafdc_and_zba_zbb_instructions ... ok
+21:test tests::fcvt_l_d_and_fcvt_d_lu_saturate ... ok
+22:test tests::rv64m_div_rem_zero_and_overflow_semantics_match_isa_spec ... ok
+23:test tests::legacy_snapshot_v1_restores_hart_zero_and_parks_secondaries ... ok
+24:test tests::sv39_enforces_pte_u_sum_smep_and_cow_dirty_bit ... ok
+25:test tests::malformed_kernel_images_are_rejected ... ok
+26:test tests::user_mode_cannot_access_supervisor_csrs_or_sret ... ok
+27:test tests::unaligned_guest_access_is_byte_accurate_and_bounds_checked ... ok
+28:test tests::peripherals_fdt_sbi_and_snapshot_roundtrip ... ok
+29:test tests::smp_harts_boot_through_sbi_hsm_round_robin_and_snapshot_all_harts ... ok
+30-
+31:test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
+32-
+33-     Running unittests src/lib.rs (target/debug/deps/wasmnux_storage-7acd31188e8ea124)
+34-
+35-running 5 tests
+36:test tests::crc32_matches_standard_check_value ... ok
+37:test tests::identifier_validation_blocks_traversal_and_special_chars ... ok
+38:test tests::enforces_bounds_readonly_and_atomic_quota_limits ... ok
+39:test tests::sparse_cow_reads_writes_across_chunk_boundaries_and_tracks_dirty ... ok
+40:test tests::snapshot_export_and_tamper_resistant_import_work ... ok
+41-
+42:test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+43-
+44-     Running unittests src/lib.rs (target/debug/deps/wasmnux_virtio-c09e8736ae829839)
+45-
+46-running 2 tests
+47:test tests::virtio_net_mmio_arp_roundtrip_and_virtio_rng_entropy ... ok
+48:test tests::virtio_blk_mmio_write_and_read_roundtrip_with_irq ... ok
+49-
+50:test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+51-
+52-     Running tests/mini_os_boot.rs (target/debug/deps/mini_os_boot-17dc84931225d80f)
+53-
+54-running 1 test
+55:test boots_rv64_smode_mini_os_through_mmu_irq_uart_fb_virtio_blk_and_poweroff ... ok
+56-
+57:test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+58-
+59-     Running unittests src/lib.rs (target/debug/deps/wasmnux_wasm-85a590ac466395b1)
+60-
+61-running 3 tests
+62:test tests::abi_version_is_nonzero ... ok
+63:test tests::smp_vm_create_exposes_hart_count_and_rejects_invalid_counts ... ok
+64:test tests::wasm_abi_lifecycle_boot_uart_snapshot_and_error_bounds ... ok
+65-
+66:test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.14s
+67-
+68-   Doc-tests wasmnux_net
+69-
+70-running 0 tests
+71-
+72:test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+73-
+74-   Doc-tests wasmnux_riscv
+75-
+76-running 0 tests
+77-
+78:test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+79-
+80-   Doc-tests wasmnux_storage
+81-
+82-running 0 tests
+83-
+84:test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+85-
+86-   Doc-tests wasmnux_virtio
+87-
+88-running 0 tests
+89-
+90:test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+91-
+92-   Doc-tests wasmnux_wasm
+93-
+94-running 0 tests
+95-
+96:test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+97-
+### /tmp/wasmnux-wasm-build.log
+### /tmp/wasmnux-ts.log
+
+> wasmnux@0.1.0 format:check
+> prettier --check "src/**/*.{ts,css}" "tests/**/*.ts" "index.html"
+
+Checking formatting...
+All matched files use Prettier code style!
+
+> wasmnux@0.1.0 lint
+> eslint "src/**/*.ts" "tests/**/*.ts"
+
+
+> wasmnux@0.1.0 typecheck
+> tsc --noEmit
+
+### /tmp/wasmnux-vitest.log
+### /tmp/wasmnux-bench.log
+25-  },
+26-  "vanillaLinux": {
+27:    "coldBootTrialsMs": [
+28-      3775.9,
+29-      3752.2,
+30-      3973.2
+31-    ],
+32:    "coldBootMedianMs": 3775.9,
+33-    "bootInstructions": 94703759,
+34-    "effectiveMipsTrials": [
+35-      25.1,
+36-      25.2,
+37-      23.8
+38-    ],
+--
+75-  },
+76-  "debianLinux": {
+77:    "coldBootTrialsMs": [
+78-      4204.8,
+79-      4264.2,
+80-      4202.7
+81-    ],
+82:    "coldBootMedianMs": 4204.8,
+83-    "bootInstructions": 104750000,
+84-    "effectiveMipsTrials": [
+85-      24.9,
+86-      24.6,
+87-      24.9
+88-    ],
+--
+96-     [33m[2m✓[22m[39m measures multi-trial cold boot time, MIPS, terminal RTT, ext4 block I/O throughput, snapshot compression/restore, and WASM memory footprint[33m 32535[2mms[22m[39m
+97-
+98:[2m Test Files [22m [1m[32m1 passed[39m[22m[90m (1)[39m
+99:[2m      Tests [22m [1m[32m1 passed[39m[22m[90m (1)[39m
+100-[2m   Start at [22m 18:18:59
+101-[2m   Duration [22m 33.37s[2m (tests 98%, import 2%)[22m
+102-
+### /tmp/wasmnux-e2e.log
+26-Running 9 tests using 1 worker
+27-
+28:  ✓  1 tests/e2e/browser-interface.spec.ts:3:1 › drives full Browser Interface: interactive xterm.js typing, pause/resume, snapshots, invalid disk import banner, diagnostics, profile switch, persistent UI settings, and PWA SW (10.1s)
+29:  ✓  2 tests/e2e/debian-linux.spec.ts:3:1 › boots Official Debian 13.7 ("trixie") riscv64 in Chromium Web Worker, installs .deb via real apt-get over VirtIO-Net, and persists dpkg state across reload (1.1m)
+30:  ✓  3 tests/e2e/foundation.spec.ts:3:1 › loads compiled Rust WASM runtime, executes RV64 guest inside Web Worker, and reports capabilities (293ms)
+31:  ✘  4 tests/e2e/quota-and-locks.spec.ts:13:1 › exhausts the real browser origin quota and detects typed quota_exceeded without data loss (1.6m)
+32:  ✓  5 tests/e2e/quota-and-locks.spec.ts:113:1 › serializes cross-tab access to one profile with real navigator.locks across two tabs (3.0s)
+33:  ✓  6 tests/e2e/storage-persistence.spec.ts:7:1 › persists isolated profile chunks, backups, and preferences across reload AND full browser restart (OPFS + IDB) (1.3s)
+34:  ✓  7 tests/e2e/vanilla-linux.spec.ts:3:1 › boots genuine Vanilla Linux 7.3.1 in Chromium Web Worker and persists ext4 files across page reload (13.6s)
+35:  ✓  8 tests/e2e/webgpu-graphics.spec.ts:3:1 › renders real Linux 7.3.1 /dev/fb0 SimpleFB frames via WebGPU compute+render pipeline, recovers from GPU device loss, and handles resize (7.2s)
+36:  ✓  9 tests/e2e/webgpu-graphics.spec.ts:120:1 › automatically falls back to Canvas 2D renderer with identical pixel accuracy when WebGPU is unavailable (6.8s)
+37-
+38-
+39:  1) tests/e2e/quota-and-locks.spec.ts:13:1 › exhausts the real browser origin quota and detects typed quota_exceeded without data loss 
+40-
+41:    Error: expect(received).not.toBeNull()
+42-
+43-    Received: null
+44-
+45-       96 |   // The browser genuinely refused a write and the engine typed it as quota_exceeded.
+46:       97 |   expect(result.otherError).toBeNull();
+47:    >  98 |   expect(result.typedError).not.toBeNull();
+48-          |                                 ^
+49:       99 |   expect(result.typedError?.code).toBe('quota_exceeded');
+50:      100 |   expect(result.typedError?.message.length).toBeGreaterThan(0);
+51:      101 |   expect(result.written).toBeGreaterThan(0);
+52-        at /home/runner/work/WASMNux/WASMNux/tests/e2e/quota-and-locks.spec.ts:98:33
+53-
+54:    Error Context: test-results/quota-and-locks-exhausts-t-a8949--exceeded-without-data-loss/error-context.md
+55-
+56-  1 failed
+57:    tests/e2e/quota-and-locks.spec.ts:13:1 › exhausts the real browser origin quota and detects typed quota_exceeded without data loss 
+58-  8 passed (3.5m)
