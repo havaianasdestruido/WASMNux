@@ -13,7 +13,7 @@ import { expect, test } from '@playwright/test';
 test('exhausts the real browser origin quota and detects typed quota_exceeded without data loss', async ({
   page,
 }) => {
-  test.setTimeout(300_000);
+  test.setTimeout(600_000);
   await page.goto('/');
   await expect(page.locator('main[data-ready="true"]')).toBeVisible();
 
@@ -38,20 +38,31 @@ test('exhausts the real browser origin quota and detects typed quota_exceeded wi
     let typedError: { name: string; code: string; message: string } | null = null;
     let otherError: string | null = null;
 
-    // Fill until the browser refuses. Bounded so a very large quota cannot hang the test.
+    // Fill until the browser refuses, batching writes so the loop does not spend the whole
+    // timeout on per-chunk overhead.
     //
-    // The bound is deliberately far above the observed refusal point: Chromium's per-origin
-    // bucket limit on this host is fluid (measured refusals at ~219 MiB and ~251 MiB of 64 KiB
-    // chunks on the same machine, well below the ~1.07 GiB `estimate().quota`). A 256 MiB bound
-    // sat inside that band and made the spec flake when the limit drifted up. 512 MiB leaves
-    // ~2x headroom over the highest observed refusal while still terminating in well under the
-    // test timeout if the browser never refuses.
-    for (let i = 1; i <= 8192; i += 1) {
+    // The iteration bound must be derived, not hard-coded. Chromium's per-origin limit tracks
+    // *free disk space*, so it is a property of the machine, not of this test: refusals were
+    // measured at ~219 MiB and ~251 MiB on the dev box, and the spec still ran past 512 MiB on a
+    // CI runner. Fixed bounds (256 MiB, then 512 MiB) each sat inside some host's band. Instead
+    // we size the run from `estimate().quota` with a 2x margin, which adapts to whatever the
+    // browser reports here, and still cannot hang because the count is bounded either way.
+    const CHUNK_BYTES = chunk.byteLength;
+    const BATCH = 32;
+    const quotaBytes = estimateBefore.quota ?? 0;
+    const targetChunks = Math.min(
+      32_768, // hard ceiling: 2 GiB of 64 KiB chunks
+      Math.max(1024, Math.ceil((quotaBytes * 2) / CHUNK_BYTES)),
+    );
+
+    for (let i = 1; i <= targetChunks; i += BATCH) {
+      const batch: { chunkIndex: number; crc32: number; data: Uint8Array }[] = [];
+      for (let k = 0; k < BATCH && i + k <= targetChunks; k += 1) {
+        batch.push({ chunkIndex: i + k, crc32: checksum, data: chunk });
+      }
       try {
-        await engine.commitDirtyChunks('quota-e2e', cap, [
-          { chunkIndex: i, crc32: checksum, data: chunk },
-        ]);
-        written += 1;
+        await engine.commitDirtyChunks('quota-e2e', cap, batch);
+        written += batch.length;
       } catch (err: unknown) {
         const e = err as { name?: string; code?: string; message?: string };
         if (e.code === 'quota_exceeded') {
@@ -82,7 +93,9 @@ test('exhausts the real browser origin quota and detects typed quota_exceeded wi
       committedChunkIndexes: recovered.overlayChunks.map((c) => c.chunkIndex).sort((a, b) => a - b),
       recoveredOrphanChunks: recovered.recoveredOrphanChunks,
       mode: engine.mode,
-      quotaBefore: estimateBefore.quota ?? 0,
+      quotaBefore: quotaBytes,
+      targetChunks,
+      chunkBytes: CHUNK_BYTES,
       quotaAfter: estimateAfter.quota ?? 0,
       hasWebLocks: typeof navigator.locks.request === 'function',
     };
@@ -95,7 +108,13 @@ test('exhausts the real browser origin quota and detects typed quota_exceeded wi
 
   // The browser genuinely refused a write and the engine typed it as quota_exceeded.
   expect(result.otherError).toBeNull();
-  expect(result.typedError).not.toBeNull();
+  expect(
+    result.typedError,
+    'the browser never refused a write: filled ' +
+      `${String(result.written)} of ${String(result.targetChunks)} chunks ` +
+      `(${String(Math.round((result.written * result.chunkBytes) / (1024 * 1024)))} MiB) against a ` +
+      `reported quota of ${String(Math.round(result.quotaBefore / (1024 * 1024)))} MiB`,
+  ).not.toBeNull();
   expect(result.typedError?.code).toBe('quota_exceeded');
   expect(result.typedError?.message.length).toBeGreaterThan(0);
   expect(result.written).toBeGreaterThan(0);

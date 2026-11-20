@@ -125,11 +125,13 @@ Central implementation plan, acceptance criteria and verification tracker for **
       `StorageValidationError { code: 'quota_exceeded' }`; `inspectQuotaHealth()` surfaces
       `lowSpaceWarning` / `evictionRiskWarning` and `lastQuotaExhaustion`. The spec's fill
       loop is bounded at 512 MiB (8192 x 64 KiB chunks) rather than 256 MiB: Chromium's
-      per-origin bucket limit on this host is fluid and was measured refusing anywhere from
-      ~219 MiB to ~251 MiB while `estimate().quota` still reported ~1.07 GiB, so the older
-      256 MiB bound sat inside the drift band and flaked. `Storage.overrideQuotaForOrigin`
-      over CDP is accepted but has no effect on `navigator.storage.estimate()` here, so it
-      cannot be used to pin the limit.
+      per-origin bucket limit is a function of _free disk space on the machine_: refusals were
+      measured at ~212-251 MiB while `estimate().quota` reported ~1.07 GiB, and CI runners with
+      more free disk ran past 512 MiB without being refused. Both fixed bounds (256, then 512
+      MiB) were therefore host-dependent. The spec now derives its own bound from
+      `estimate().quota` with a 2x margin and caps at 2 GiB, and writes in batches of 32 chunks
+      (21 s instead of 45 s). `Storage.overrideQuotaForOrigin` over CDP is accepted but has no
+      effect on `navigator.storage.estimate()` here, so it cannot be used to pin the limit.
 - [x] Cross-tab concurrency (two tabs on one profile) is locked with the Web Locks API.
       `withCrossTabLock()` takes an exclusive `wasmnux-profile-<id>` lock per storage
       operation and degrades to a direct call when Web Locks are unavailable or the realm
