@@ -1,8 +1,8 @@
 /**
- * Strict, zero-`any` TypeScript bindings for `public/wasm/wasmnux_wasm.wasm` (ABI v1).
+ * Strict, zero-`any` TypeScript bindings for `public/wasm/wasmnux_wasm.wasm` (ABI v2).
  */
 
-export const EXPECTED_WASM_ABI_VERSION = 1;
+export const EXPECTED_WASM_ABI_VERSION = 2;
 export const DISK_CHUNK_BYTES = 64 * 1024;
 export const MIN_GUEST_RAM_MIB = 16;
 export const MAX_GUEST_RAM_MIB = 1024;
@@ -84,6 +84,8 @@ export interface VmTelemetry {
   readonly diskBytesRead: number;
   readonly diskBytesWritten: number;
   readonly netRxBytes: number;
+  /** Number of emulated harts (CPUs) configured for this VM. */
+  readonly hartCount: number;
 }
 
 export interface CreateVmOptions {
@@ -91,6 +93,8 @@ export interface CreateVmOptions {
   readonly ramMib: number;
   readonly diskMib: number;
   readonly epochSeconds?: number;
+  /** Number of emulated harts (CPUs). Defaults to a single hart. */
+  readonly hartCount?: number;
 }
 
 interface RawWasmExports {
@@ -107,7 +111,9 @@ interface RawWasmExports {
     epochLo: number,
     epochHi: number,
     profileLen: number,
+    hartCount: number,
   ) => number;
+  readonly wasmnux_vm_hart_count: (handle: number) => number;
   readonly wasmnux_vm_destroy: (handle: number) => number;
   readonly wasmnux_vm_stage_kernel: (handle: number, len: number) => number;
   readonly wasmnux_vm_stage_initrd: (handle: number, len: number) => number;
@@ -156,6 +162,7 @@ const REQUIRED_FN_NAMES = [
   'wasmnux_last_error_code',
   'wasmnux_last_error_read',
   'wasmnux_vm_create',
+  'wasmnux_vm_hart_count',
   'wasmnux_vm_destroy',
   'wasmnux_vm_stage_kernel',
   'wasmnux_vm_stage_initrd',
@@ -323,6 +330,7 @@ export class WasmVmRuntime {
         epochLo,
         epochHi,
         idBytes.byteLength,
+        (opts.hartCount ?? 1) >>> 0,
       ) >>> 0;
     if (handle === 0) {
       throw this.readLastError('Failed creating WASM VM instance');
@@ -358,6 +366,14 @@ export class WasmVmSession {
 
   public get isDestroyed(): boolean {
     return this.handle === 0;
+  }
+
+  /** Number of emulated harts (CPUs) backing this VM; `0` once destroyed. */
+  public get hartCount(): number {
+    if (this.handle === 0) {
+      return 0;
+    }
+    return this.raw.wasmnux_vm_hart_count(this.handle) >>> 0;
   }
 
   public destroy(): void {
@@ -666,10 +682,10 @@ export class WasmVmSession {
   public getTelemetry(): VmTelemetry {
     const h = this.ensureActive();
     const len = this.raw.wasmnux_vm_telemetry(h) >>> 0;
-    if (len !== 64) {
+    if (len !== 72) {
       throw this.runtime.readLastError('Failed reading VM telemetry');
     }
-    const buf = this.runtime.readOutput(64);
+    const buf = this.runtime.readOutput(72);
     const dv = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
     return {
       totalSteps: dv.getBigUint64(0, true),
@@ -681,6 +697,7 @@ export class WasmVmSession {
       diskBytesRead: Number(dv.getBigUint64(40, true)),
       diskBytesWritten: Number(dv.getBigUint64(48, true)),
       netRxBytes: Number(dv.getBigUint64(56, true)),
+      hartCount: Number(dv.getBigUint64(64, true)),
     };
   }
 }

@@ -3,6 +3,7 @@
 use std::collections::VecDeque;
 
 use crate::checked_guest_offset;
+use crate::sbi::HartHsmState;
 use crate::trap::{AccessType, SystemResetAction, Trap};
 use crate::{GUEST_FB_BASE, GUEST_RAM_BASE};
 
@@ -239,11 +240,18 @@ impl SimpleFramebuffer {
     }
 }
 
-/// Core-Local Interruptor (`msip`, `mtimecmp`, `mtime` @ 10 MHz).
+/// Maximum number of harts (SMP) modelled by the CLINT and PLIC.
+pub const MAX_HARTS: usize = 8;
+
+/// PLIC contexts reserved for the M-mode and S-mode external interrupt lines of each hart
+/// (context `2 * hart + 0` = M-mode, `2 * hart + 1` = S-mode), matching the `qemu-virt` layout.
+pub const PLIC_CONTEXTS_PER_HART: usize = 2;
+
+/// Core-Local Interruptor (`msip[hart]`, `mtimecmp[hart]`, shared `mtime` @ 10 MHz).
 #[derive(Clone, Debug)]
 pub struct ClintState {
-    pub msip: u32,
-    pub mtimecmp: u64,
+    pub msip: [u32; MAX_HARTS],
+    pub mtimecmp: [u64; MAX_HARTS],
     pub mtime: u64,
 }
 
@@ -256,10 +264,16 @@ impl Default for ClintState {
 impl ClintState {
     pub fn new() -> Self {
         Self {
-            msip: 0,
-            mtimecmp: u64::MAX,
+            msip: [0; MAX_HARTS],
+            mtimecmp: [u64::MAX; MAX_HARTS],
             mtime: 0,
         }
+    }
+
+    /// Reset all per-hart timer comparators and software-interrupt pending bits.
+    pub fn reset_all_harts(&mut self) {
+        self.msip = [0; MAX_HARTS];
+        self.mtimecmp = [u64::MAX; MAX_HARTS];
     }
 
     #[inline]
@@ -268,29 +282,62 @@ impl ClintState {
     }
 
     #[inline]
-    pub fn timer_due(&self) -> bool {
-        self.mtime >= self.mtimecmp
+    pub fn timer_due(&self, hart_id: usize) -> bool {
+        self.mtime >= self.mtimecmp[hart_id.min(MAX_HARTS - 1)]
     }
 
     #[inline]
-    pub fn ticks_until_due(&self) -> Option<u64> {
-        if self.mtimecmp == u64::MAX {
+    pub fn ticks_until_due(&self, hart_id: usize) -> Option<u64> {
+        let cmp = self.mtimecmp[hart_id.min(MAX_HARTS - 1)];
+        if cmp == u64::MAX {
             None
-        } else if self.mtime >= self.mtimecmp {
+        } else if self.mtime >= cmp {
             Some(0)
         } else {
-            Some(self.mtimecmp - self.mtime)
+            Some(cmp - self.mtime)
+        }
+    }
+
+    /// `msip` register of hart `hart_id` as a 32-bit value (bit 0 = software interrupt pending).
+    #[inline]
+    pub fn msip_for(&self, hart_id: usize) -> u32 {
+        self.msip[hart_id.min(MAX_HARTS - 1)]
+    }
+
+    /// Set (`Some(true)`), clear (`Some(false)`) or leave untouched (`None`) the M-mode software
+    /// interrupt pending bit of every hart in `hart_mask` (SBI `send_ipi` semantics).
+    pub fn send_ipi(&mut self, hart_mask: u64, set: bool) {
+        for (hart, slot) in self.msip.iter_mut().enumerate() {
+            if (hart_mask & (1u64 << hart)) == 0 {
+                continue;
+            }
+            if set {
+                *slot = 1;
+            } else {
+                *slot = 0;
+            }
         }
     }
 
     pub fn read(&self, offset: u64, size: usize) -> u64 {
-        let reg64 = match offset & !7 {
-            0x0000 => u64::from(self.msip),
-            0x4000 => self.mtimecmp,
-            0xBFF8 => self.mtime,
-            _ => 0,
+        let (reg64, shift) = match offset {
+            0x0000..=0x3FFC => {
+                let hart = (offset / 4) as usize;
+                (u64::from(self.msip_for(hart)), (offset & 3) * 8)
+            }
+            0x4000..=0x7FF8 => {
+                let idx = (offset - 0x4000) / 8;
+                let reg = if idx < MAX_HARTS as u64 {
+                    self.mtimecmp[idx as usize]
+                } else {
+                    0
+                };
+                (reg, (offset & 7) * 8)
+            }
+            0xBFF8 => (self.mtime, 0),
+            0xBFFC => (self.mtime, 32),
+            _ => (0, 0),
         };
-        let shift = (offset & 7) * 8;
         let shifted = reg64 >> shift;
         match size {
             1 => shifted & 0xFF,
@@ -302,10 +349,29 @@ impl ClintState {
 
     pub fn write(&mut self, offset: u64, size: usize, val: u64) {
         match (offset, size) {
-            (0x0000, 4 | 8) => self.msip = (val as u32) & 1,
-            (0x4000, 8) => self.mtimecmp = val,
-            (0x4000, 4) => self.mtimecmp = (self.mtimecmp & !0xFFFF_FFFF) | (val & 0xFFFF_FFFF),
-            (0x4004, 4) => self.mtimecmp = (self.mtimecmp & 0xFFFF_FFFF) | (val << 32),
+            (0x0000..=0x3FFC, 4 | 8) => {
+                let hart = (offset / 4) as usize;
+                if hart < MAX_HARTS {
+                    self.msip[hart] = (val as u32) & 1;
+                }
+            }
+            (0x4000..=0x7FF8, 8) => {
+                let idx = ((offset - 0x4000) / 8) as usize;
+                if idx < MAX_HARTS {
+                    self.mtimecmp[idx] = val;
+                }
+            }
+            (0x4000..=0x7FF8, 4) => {
+                let idx = ((offset - 0x4000) / 8) as usize;
+                if idx < MAX_HARTS {
+                    if (offset & 4) == 0 {
+                        self.mtimecmp[idx] =
+                            (self.mtimecmp[idx] & !0xFFFF_FFFF) | (val & 0xFFFF_FFFF);
+                    } else {
+                        self.mtimecmp[idx] = (self.mtimecmp[idx] & 0xFFFF_FFFF) | (val << 32);
+                    }
+                }
+            }
             (0xBFF8, 8) => self.mtime = val,
             (0xBFF8, 4) => self.mtime = (self.mtime & !0xFFFF_FFFF) | (val & 0xFFFF_FFFF),
             (0xBFFC, 4) => self.mtime = (self.mtime & 0xFFFF_FFFF) | (val << 32),
@@ -314,15 +380,16 @@ impl ClintState {
     }
 }
 
-/// SiFive-compatible Platform-Level Interrupt Controller (`PLIC`, up to 32 IRQ sources, 2 contexts).
+/// SiFive-compatible Platform-Level Interrupt Controller (`PLIC`, up to 32 IRQ sources and
+/// `MAX_HARTS * 2` contexts so every hart has an independent M-mode and S-mode target).
 #[derive(Clone, Debug)]
 pub struct PlicState {
     priorities: [u32; 32],
     level: u32,
     pending: u32,
     claimed: u32,
-    enable: [u32; 2],
-    threshold: [u32; 2],
+    enable: [u32; MAX_HARTS * PLIC_CONTEXTS_PER_HART],
+    threshold: [u32; MAX_HARTS * PLIC_CONTEXTS_PER_HART],
 }
 
 impl Default for PlicState {
@@ -338,8 +405,8 @@ impl PlicState {
             level: 0,
             pending: 0,
             claimed: 0,
-            enable: [0; 2],
-            threshold: [0; 2],
+            enable: [0; MAX_HARTS * PLIC_CONTEXTS_PER_HART],
+            threshold: [0; MAX_HARTS * PLIC_CONTEXTS_PER_HART],
         }
     }
 
@@ -383,9 +450,24 @@ impl PlicState {
         }
     }
 
+    /// S-mode external interrupt line of `hart_id` (PLIC context `2 * hart + 1`).
+    #[inline]
+    pub fn supervisor_external_pending_for(&self, hart_id: usize) -> bool {
+        let ctx = hart_id.min(MAX_HARTS - 1) * PLIC_CONTEXTS_PER_HART + 1;
+        self.best_irq(ctx).is_some()
+    }
+
+    /// Backwards-compatible query used by callers that only model hart 0.
     #[inline]
     pub fn supervisor_external_pending(&self) -> bool {
-        self.best_irq(1).is_some() || self.best_irq(0).is_some()
+        self.supervisor_external_pending_for(0)
+    }
+
+    /// M-mode external interrupt line of `hart_id` (PLIC context `2 * hart + 0`).
+    #[inline]
+    pub fn machine_external_pending_for(&self, hart_id: usize) -> bool {
+        let ctx = hart_id.min(MAX_HARTS - 1) * PLIC_CONTEXTS_PER_HART;
+        self.best_irq(ctx).is_some()
     }
 
     fn claim(&mut self, ctx: usize) -> u32 {
@@ -416,12 +498,29 @@ impl PlicState {
                 self.priorities.get(idx).copied().unwrap_or(0)
             }
             0x0000_1000 => self.pending,
-            0x0000_2000 => self.enable[0],
-            0x0000_2080 => self.enable[1],
-            0x0020_0000 => self.threshold[0],
-            0x0020_0004 => self.claim(0),
-            0x0020_1000 => self.threshold[1],
-            0x0020_1004 => self.claim(1),
+            // Enable bits: one 32-bit word per context at `0x2000 + 0x80 * context`
+            // (32 sources x 4 bytes, the SiFive / `qemu-virt` PLIC layout).
+            0x0000_2000..=0x0000_27FF => {
+                let rel = offset - 0x2000;
+                let ctx = (rel / 0x80) as usize;
+                if (rel & 0x7F) == 0 {
+                    self.enable.get(ctx).copied().unwrap_or(0)
+                } else {
+                    0
+                }
+            }
+            // Context `ctx` threshold / claim-complete registers at `0x200000 + 0x1000 * ctx`.
+            0x0020_0000..=0x0020_3FFC => {
+                let rel = offset - 0x0020_0000;
+                let ctx = (rel / 0x1000) as usize;
+                if (rel & 0xFFF) == 0 {
+                    self.threshold.get(ctx).copied().unwrap_or(0)
+                } else if (rel & 0xFFF) == 4 {
+                    self.claim(ctx)
+                } else {
+                    0
+                }
+            }
             _ => 0,
         };
         u64::from(val)
@@ -436,12 +535,26 @@ impl PlicState {
                     self.priorities[idx] = v & 0x7;
                 }
             }
-            0x0000_2000 => self.enable[0] = v & !1,
-            0x0000_2080 => self.enable[1] = v & !1,
-            0x0020_0000 => self.threshold[0] = v & 0x7,
-            0x0020_0004 => self.complete(0, v),
-            0x0020_1000 => self.threshold[1] = v & 0x7,
-            0x0020_1004 => self.complete(1, v),
+            0x0000_2000..=0x0000_27FF => {
+                let rel = offset - 0x2000;
+                let ctx = (rel / 0x80) as usize;
+                if (rel & 0x7F) == 0 {
+                    if let Some(slot) = self.enable.get_mut(ctx) {
+                        *slot = v & !1;
+                    }
+                }
+            }
+            0x0020_0000..=0x0020_3FFC => {
+                let rel = offset - 0x0020_0000;
+                let ctx = (rel / 0x1000) as usize;
+                if (rel & 0xFFF) == 0 {
+                    if let Some(slot) = self.threshold.get_mut(ctx) {
+                        *slot = v & 0x7;
+                    }
+                } else if (rel & 0xFFF) == 4 {
+                    self.complete(ctx, v);
+                }
+            }
             _ => {}
         }
     }
@@ -497,6 +610,11 @@ impl Uart16550 {
 
     pub fn push_console_output(&mut self, byte: u8) {
         self.tx_fifo.push_back(byte);
+    }
+
+    /// Pop one byte from the receive FIFO (legacy SBI `console_getchar`).
+    pub fn pop_input(&mut self) -> Option<u8> {
+        self.rx_fifo.pop_front()
     }
 
     pub fn has_pending_output(&self) -> bool {
@@ -697,6 +815,22 @@ pub struct MachineBus {
     pub uart: Uart16550,
     pub rtc: GoldfishRtc,
     pub syscon: SysconDevice,
+    /// Hart currently driving the bus (used by SBI calls that act on \"this hart\").
+    pub current_hart: usize,
+    /// Number of harts modelled by the machine (1 = uniprocessor).
+    pub hart_count: usize,
+    /// Per-hart HSM start requests written by SBI `hart_start` and consumed by the machine.
+    pub hsm_requests: Vec<HartHsmState>,
+    /// Harts that executed SBI `hart_stop` and must remain halted until restarted.
+    pub hart_halt: [bool; MAX_HARTS],
+    /// `a1` opaque values delivered to harts entering through SBI `hart_start`.
+    pub hart_scratch_targets: [Option<u64>; MAX_HARTS],
+    /// Pending inter-hart supervisor software interrupt (SBI `send_ipi`), applied by the
+    /// multi-hart scheduler before the target hart\'s next slice.
+    pub ipi_pending: Option<(u64, bool)>,
+    /// Multi-hart scheduler cursor: the hart that receives the extra step when a slice length
+    /// is not divisible by the hart count (keeps total executed steps exact).
+    pub slice_remainder_hart: usize,
     mmio_slots: Vec<MmioSlot>,
 }
 
@@ -710,8 +844,34 @@ impl MachineBus {
             uart: Uart16550::new(),
             rtc: GoldfishRtc::new(base_epoch_ns),
             syscon: SysconDevice::default(),
+            current_hart: 0,
+            hart_count: 1,
+            hsm_requests: vec![HartHsmState {
+                hart_id: 0,
+                started: true,
+                start_request: None,
+            }],
+            hart_halt: [false; MAX_HARTS],
+            hart_scratch_targets: [None; MAX_HARTS],
+            ipi_pending: None,
+            slice_remainder_hart: 0,
             mmio_slots: Vec::new(),
         }
+    }
+
+    /// Configure the number of modelled harts (bounded by [`MAX_HARTS`]).
+    pub fn set_hart_count(&mut self, harts: usize) {
+        let clamped = harts.clamp(1, MAX_HARTS);
+        self.hart_count = clamped;
+        self.hsm_requests = (0..clamped)
+            .map(|hart_id| HartHsmState {
+                hart_id,
+                started: hart_id == 0,
+                start_request: None,
+            })
+            .collect();
+        self.hart_halt = [false; MAX_HARTS];
+        self.hart_scratch_targets = [None; MAX_HARTS];
     }
 
     pub fn register_mmio(&mut self, base: u64, size: u64, dev: Box<dyn MmioDevice>) {

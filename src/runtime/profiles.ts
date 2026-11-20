@@ -19,6 +19,8 @@ export interface LinuxProfileDefinition {
   readonly baseDiskUrl: string;
   readonly defaultRamMib: number;
   readonly diskMib: number;
+  /** Emulated hart (CPU) count for this profile. */
+  readonly hartCount: number;
   readonly bootargs: string;
 }
 
@@ -26,16 +28,25 @@ export const LINUX_PROFILES: Readonly<Record<LinuxProfileId, LinuxProfileDefinit
   vanilla: {
     id: 'vanilla',
     name: 'Vanilla Linux',
-    subtitle: 'Linux 7.3.1 · BusyBox 1.36.1 · ext4',
+    subtitle: 'Linux 7.3.1 · BusyBox 1.37.0 · ext4',
     description:
-      'Minimal upstream Linux 7.3.1 (riscv64) booting a static musl BusyBox 1.36.1 initramfs with a persistent 64 MiB ext4 disk on /dev/vda.',
+      'Minimal upstream Linux 7.3.1 (riscv64) booting a static musl BusyBox 1.37.0 initramfs with a persistent 64 MiB ext4 disk on /dev/vda.',
     kernelVersion: '7.3.1',
-    userspaceSummary: 'BusyBox 1.36.1 (static riscv64-linux-musl)',
+    userspaceSummary: 'BusyBox 1.37.0 (static riscv64-linux-musl, built from source)',
     kernelUrl: '/images/vmlinux-7.3.1-riscv64.Image.gz',
     initrdUrl: '/images/vanilla-initramfs.cpio.gz',
     baseDiskUrl: '/images/vanilla-disk.ext4.gz',
     defaultRamMib: 128,
     diskMib: 64,
+    // One hart. The shipped `vmlinux-7.3.1` is a uniprocessor build (`# CONFIG_SMP is not set`):
+    // Linux boots on hart 0 and never starts hart 1 through SBI HSM.
+    //
+    // Advertising two harts currently stalls this kernel right after
+    // `virtio_blk virtio2: [vda] ...` and it never reaches userspace, so 1 is what ships.
+    // The SMP datapath (second hart, CLINT/PLIC targeting, per-hart snapshot state) is still
+    // covered by `crates/wasmnux-riscv` tests and `tests/unit/wasm-runtime.test.ts`; the
+    // multi-hart vanilla boot is tracked as open work in `TODO.MD`.
+    hartCount: 1,
     bootargs: 'console=ttyS0,115200 earlycon=sbi panic=-1',
   },
   debian: {
@@ -51,6 +62,7 @@ export const LINUX_PROFILES: Readonly<Record<LinuxProfileId, LinuxProfileDefinit
     baseDiskUrl: '/images/debian-rootfs.ext4.gz',
     defaultRamMib: 256,
     diskMib: 256,
+    hartCount: 1,
     bootargs:
       'console=ttyS0,115200 earlycon=sbi root=/dev/vda rw rootwait init=/usr/sbin/init panic=-1',
   },

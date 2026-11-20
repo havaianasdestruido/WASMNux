@@ -26,6 +26,8 @@ export type WorkerCommand =
       readonly profileId: string;
       readonly ramMib: number;
       readonly diskMib: number;
+      /** Emulated hart (CPU) count; omitted means a single hart. */
+      readonly hartCount?: number;
       readonly baseChunks: readonly BaseChunkInput[];
       readonly overlayChunks: readonly BaseChunkInput[];
       readonly maxOverlayChunks: number | null;
@@ -164,6 +166,7 @@ export function isWorkerCommand(value: unknown): value is WorkerCommand {
         typeof value['profileId'] === 'string' &&
         typeof value['ramMib'] === 'number' &&
         typeof value['diskMib'] === 'number' &&
+        (value['hartCount'] === undefined || typeof value['hartCount'] === 'number') &&
         Array.isArray(value['baseChunks']) &&
         Array.isArray(value['overlayChunks'])
       );

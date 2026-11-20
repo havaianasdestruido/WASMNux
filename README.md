@@ -9,7 +9,7 @@
 ## Key Capabilities
 
 - **Two Isolated Linux Profiles** (independent `ext4` overlays, snapshots, settings, and factory reset):
-  1. **Vanilla Linux (`7.3.1` + BusyBox `1.36.1`)**: Cold-boots to root shell in **~2.52 seconds** median (`[2662.3, 2517.4, 2507.3]` ms across 3 trials on 2-vCPU Xeon @ 2.60 GHz; `62.1M` instructions, `24.8 MIPS`), static `riscv64-linux-musl` BusyBox `1.36.1` with 300+ applets, persistent 64 MiB `ext4` `/dev/vda`, and `/usr/bin/wasmnux-fbtest` `/dev/fb0` graphics generator.
+  1. **Vanilla Linux (`7.3.1` + BusyBox `1.37.0`)**: Cold-boots to root shell in **~3.84 seconds** median (`[3996.7, 3842.2, 3712.1]` ms across 3 trials on 2-vCPU Xeon @ 2.60 GHz; `63.2M` instructions, `24.6 MIPS`), static `riscv64-linux-musl` BusyBox `1.37.0` (rebuilt from source) with 300+ applets, persistent 64 MiB `ext4` `/dev/vda`, and `/usr/bin/wasmnux-fbtest` `/dev/fb0` graphics generator. Both the kernel and the userspace are now built from source in-repo (`scripts/build-kernel.sh`, `scripts/build-busybox.sh`, `scripts/build-vanilla-rootfs.sh`).
   2. **Debian `13.7` ("trixie") `riscv64`**: Cold-boots official Debian 13.7 `riscv64` (`glibc 2.41`, `bash 5.2`, GNU `coreutils 9.7`, `apt 3.0.3`, `dpkg 1.22.22`, BusyBox) in **~3.25 seconds** median (`[3249.0, 3256.0, 3171.5]` ms across 3 trials; `78.0M` instructions, `24.0 MIPS`), supporting real `apt-get update`, `apt-get install`, dependency resolution, and `apt-get remove` over `VirtIO-Net` (`eth0`) with persistent `/var/lib/dpkg/status` across browser restarts and offline `.deb` usability.
 - **Rust -> WebAssembly Virtualization Core (`crates/wasmnux-*`)**:
   - `RV64IMAFDC` + `Zicsr` + `Zifencei`, Machine/Supervisor/User privilege rings, `Sv39` 3-level MMU with direct-mapped `ITLB`/`DTLB` fast paths, `SBI v0.2`, `CLINT` (`WFI` timer fast-forward), `PLIC`, `NS16550A` UART, `Goldfish RTC`, `Syscon` poweroff/reboot, `SimpleFB` (`640x400` `BGRX8888` dirty-row bitmap), and `VirtIO MMIO v2` (`virtio-blk`, `virtio-net`, `virtio-rng`).
@@ -72,25 +72,25 @@ cargo test --workspace
 npm run format:check
 npm run typecheck
 npm run lint
-npm test
+npm test          # excludes benchmarks.test.ts; `npm run test:all` runs everything
 
 # 3. Reproducible performance benchmarks (cold boot, MIPS, RTT, ext4 I/O, snapshots)
-npm run bench
+npm run bench     # run alone: these assert throughput and must not share a CPU
 
 # 4. Full Headless Chromium 153 Playwright E2E suite (Vanilla, Debian APT, WebGPU, Storage, UI/PWA)
 npm run test:e2e
 ```
 
-### Measured Performance Summary (`docs/BENCHMARKS.md` — `2026-10-31T23:35:44.846Z`, 2-vCPU Xeon @ 2.60 GHz)
+### Measured Performance Summary (`docs/BENCHMARKS.md` — `2026-11-20T16:57:15.666Z`, 2-vCPU Xeon @ 2.60 GHz)
 
-| Metric | Measured Value (`N=3` boots / snapshots, `N=5` RTT) |
-|---|---|
-| `wasmnux_wasm.wasm` release binary | **304.6 KiB** (`311,906` bytes, 0 external crates) |
-| **Vanilla Linux `7.3.1`** cold boot to shell (median) | **2,517.4 ms** (`[2662.3, 2517.4, 2507.3]` ms, **24.8 MIPS**, `144.6 MiB` WASM memory) |
-| **Debian `13.7` ("trixie")** cold boot to `bash` (median) | **3,249.0 ms** (`[3249.0, 3256.0, 3171.5]` ms, **24.0 MIPS**, `344.8 MiB` WASM memory) |
-| Terminal serial round-trip latency (min / median / max) | **3.93 ms / 12.92 ms / 30.51 ms** (`[12.92, 21.84, 4.05, 30.51, 3.93]` ms) |
-| Guest `ext4` `/dev/vda` 4 MiB `urandom+fsync` write / uncached read | **66.4 MiB/s** (`60.3 ms`) / **375.6 MiB/s** (`10.7 ms`) |
-| Live 128 MiB VM snapshot size (gzip) & restore time | **5.23 MiB** (24.5x ratio) / **40.6 ms** median (`145.0 ms` cold Trial 1) |
+| Metric                                                              | Measured Value (`N=3` boots / snapshots, `N=5` RTT)                                    |
+| ------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| `wasmnux_wasm.wasm` release binary                                  | **316.9 KiB** (`324,487` bytes, 44 ABI exports, 0 external crates)                     |
+| **Vanilla Linux `7.3.1`** cold boot to shell (median)               | **3,842.2 ms** (`[3996.7, 3842.2, 3712.1]` ms, **24.6 MIPS**, `145.1 MiB` WASM memory) |
+| **Debian `13.7` ("trixie")** cold boot to `bash` (median)           | **4,424.0 ms** (`[4424.0, 4274.0, 4434.8]` ms, **23.7 MIPS**, `344.7 MiB` WASM memory) |
+| Terminal serial round-trip latency (min / median / max)             | **1.96 ms / 4.20 ms / 20.78 ms** (`[20.78, 20.74, 2.15, 1.96, 4.20]` ms)               |
+| Guest `ext4` `/dev/vda` 4 MiB `urandom+fsync` write / uncached read | **421.1 MiB/s** (`9.5 ms`) / **18.7 MiB/s** (`213.4 ms`)                               |
+| Live 128 MiB VM snapshot size (gzip) & restore time                 | **14.24 MiB** (9.3x ratio) / **66.7 ms** median (`89.7 ms` cold Trial 1)               |
 
 ---
 
@@ -98,14 +98,14 @@ npm run test:e2e
 
 All artifacts in `public/wasm/`, `public/images/`, and `public/debian-repo/` are reproducibly built from official upstream sources via `scripts/`:
 
-| Script | Output | Upstream Source |
-|---|---|---|
-| `./scripts/setup-toolchains.sh` | Rust `1.88.0` (`wasm32`), LLVM/Clang `23.1.3`, Zig `0.17.0` | Official toolchain packages |
-| `./scripts/build-wasm.sh` | `public/wasm/wasmnux_wasm.wasm` | `crates/wasmnux-*` |
-| `./scripts/build-kernel.sh` | `public/images/vmlinux-7.3.1-riscv64.Image.gz` | Linux `v7.3.1` (`configs/linux-7.3.1-riscv64.config`) |
-| `./scripts/build-busybox.sh` | Static `riscv64-linux-musl` BusyBox `1.36.1` | BusyBox `1_36_1` |
-| `./scripts/build-vanilla-rootfs.sh` | `vanilla-initramfs.cpio.gz` + `vanilla-disk.ext4.gz` | BusyBox `1.36.1` + `wasmnux-fbtest` |
-| `./scripts/build-debian-rootfs.sh` | `debian-rootfs.ext4.gz` + `public/debian-repo/` | Official Debian `13.7` ("trixie") `riscv64` OCI rootfs |
+| Script                              | Output                                                      | Upstream Source                                                                                                                  |
+| ----------------------------------- | ----------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `./scripts/setup-toolchains.sh`     | Rust `1.88.0` (`wasm32`), LLVM/Clang `23.1.3`, Zig `0.17.0` | Official toolchain packages                                                                                                      |
+| `./scripts/build-wasm.sh`           | `public/wasm/wasmnux_wasm.wasm`                             | `crates/wasmnux-*`                                                                                                               |
+| `./scripts/build-kernel.sh`         | `public/images/vmlinux-7.3.1-riscv64.Image.gz`              | Linux `v7.3.1` (`configs/linux-7.3.1-riscv64.config`); falls back to `pip install kconfiglib` when the host has no flex/bison/bc |
+| `./scripts/build-busybox.sh`        | Static `riscv64-linux-musl` BusyBox `1.37.0`                | BusyBox trunk (commit pinned in script)                                                                                          |
+| `./scripts/build-vanilla-rootfs.sh` | `vanilla-initramfs.cpio.gz` + `vanilla-disk.ext4.gz`        | BusyBox `1.37.0` + `wasmnux-fbtest`                                                                                              |
+| `./scripts/build-debian-rootfs.sh`  | `debian-rootfs.ext4.gz` + `public/debian-repo/`             | Official Debian `13.7` ("trixie") `riscv64` OCI rootfs                                                                           |
 
 ---
 

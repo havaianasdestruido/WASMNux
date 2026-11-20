@@ -19,9 +19,9 @@ RAW_EXT4="${BUILD_ROOT}/debian-rootfs.ext4"
 
 mkdir -p "${BUILD_ROOT}" "${DEST_IMAGES_DIR}"
 
-# 1. Ensure static riscv64 BusyBox 1.36.1 binary is available for /usr/bin/busybox.
+# 1. Ensure a static riscv64 BusyBox binary is available for /usr/bin/busybox.
 if [ ! -x "${BUSYBOX_BIN}" ]; then
-  echo "[build-debian-rootfs] Building static riscv64 BusyBox 1.36.1..."
+  echo "[build-debian-rootfs] Building static riscv64 BusyBox..."
   "${ROOT_DIR}/scripts/build-busybox.sh"
 fi
 

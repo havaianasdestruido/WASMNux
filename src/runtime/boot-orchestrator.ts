@@ -101,6 +101,7 @@ export class BootOrchestrator {
     profileId: LinuxProfileId,
     overrides?: {
       readonly ramMib?: number;
+      readonly hartCount?: number;
       readonly readOnlyDisk?: boolean;
       readonly networkEnabled?: boolean;
     },
@@ -158,6 +159,7 @@ export class BootOrchestrator {
       profileId: profile.id,
       ramMib: overrides?.ramMib ?? profile.defaultRamMib,
       diskMib: profile.diskMib,
+      hartCount: overrides?.hartCount ?? profile.hartCount,
       baseChunks: assets.baseChunks,
       overlayChunks: recovered.overlayChunks,
       maxOverlayChunks: null,

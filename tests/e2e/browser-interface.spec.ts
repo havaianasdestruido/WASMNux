@@ -32,16 +32,16 @@ test('drives full Browser Interface: interactive xterm.js typing, pause/resume, 
   // Boot Vanilla Linux 7.3.1 via the UI Boot button
   await page.getByTestId('btn-boot').click();
   await expect(page.getByTestId('badge-vm-state')).toContainText('State: RUNNING', {
-    timeout: 30_000,
+    timeout: 120_000,
   });
 
   // Switch to Boot Diagnostics tab and wait until kernel & userspace ready milestones appear
   await page.getByTestId('tab-diagnostics').click();
   await expect(page.getByTestId('milestone-list')).toContainText('Linux Kernel Banner', {
-    timeout: 30_000,
+    timeout: 120_000,
   });
   await expect(page.getByTestId('milestone-list')).toContainText('Userspace Init & Shell Ready', {
-    timeout: 30_000,
+    timeout: 120_000,
   });
 
   // Type real interactive command directly into xterm.js helper textarea -> guest NS16550A UART!

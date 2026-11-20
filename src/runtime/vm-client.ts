@@ -33,6 +33,8 @@ export interface InitVmParams {
   readonly profileId: string;
   readonly ramMib: number;
   readonly diskMib: number;
+  /** Emulated hart (CPU) count; omitted means a single hart. */
+  readonly hartCount?: number;
   readonly baseChunks?: readonly BaseChunkInput[];
   readonly overlayChunks?: readonly BaseChunkInput[];
   readonly maxOverlayChunks?: number | null;
@@ -101,6 +103,7 @@ export class VmClient {
       profileId: params.profileId,
       ramMib: params.ramMib,
       diskMib: params.diskMib,
+      hartCount: params.hartCount ?? 1,
       baseChunks: params.baseChunks ?? [],
       overlayChunks: params.overlayChunks ?? [],
       maxOverlayChunks: params.maxOverlayChunks ?? null,

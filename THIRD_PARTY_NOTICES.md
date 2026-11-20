@@ -19,7 +19,7 @@ Guest OS images executed inside the virtual machine are separate guest software 
   - License: `GPL-2.0-only` WITH `Linux-syscall-note`
   - Reproducible build script: `scripts/build-kernel.sh` (`configs/linux-7.3.1-riscv64.config`)
 
-- **BusyBox `1.36.1` (`public/images/vanilla-initramfs.cpio.gz`)**
+- **BusyBox `1.37.0` (`public/images/vanilla-initramfs.cpio.gz`)**
   - Source: Official BusyBox git mirror (`https://busybox.net/` / `https://github.com/mirror/busybox.git`, tag `1_36_1`, commit `1a64f6a20aaf6ea4dbba68bbfa8cc1ab7e5c57c4`)
   - License: `GPL-2.0-only`
   - Reproducible build scripts: `scripts/build-busybox.sh` and `scripts/build-vanilla-rootfs.sh`
@@ -31,22 +31,22 @@ Guest OS images executed inside the virtual machine are separate guest software 
 
 ## 3. Browser Runtime Dependencies (`package.json` `dependencies`)
 
-| Package | Version | License | Purpose |
-|---|---|---|---|
-| `@xterm/xterm` | `^6.0.0` | MIT | Interactive ANSI/VT100 terminal widget connected to guest NS16550A UART |
-| `@xterm/addon-fit` | `^0.11.0` | MIT | Viewport-aware terminal column/row calculation |
+| Package            | Version   | License | Purpose                                                                 |
+| ------------------ | --------- | ------- | ----------------------------------------------------------------------- |
+| `@xterm/xterm`     | `^6.0.0`  | MIT     | Interactive ANSI/VT100 terminal widget connected to guest NS16550A UART |
+| `@xterm/addon-fit` | `^0.11.0` | MIT     | Viewport-aware terminal column/row calculation                          |
 
 ## 4. Build & Test Tooling (`package.json` `devDependencies` — Not Shipped in Production Bundle)
 
-| Package | Version | License | Purpose |
-|---|---|---|---|
-| `typescript` | `~5.8.3` | Apache-2.0 | Strict TypeScript typechecker |
-| `vite` | `^6.4.5` | MIT | ES module dev server & production bundler |
-| `vitest` | `^5.0.5` | MIT | Unit, integration, security, and benchmark test runner |
-| `@playwright/test` | `^1.64.1` | Apache-2.0 | End-to-end Chromium browser automation |
-| `@sparticuz/chromium` | `^153.0.0` | Apache-2.0 | Headless Chromium 153 binary with SwiftShader WebGPU |
-| `eslint` / `@eslint/js` / `typescript-eslint` | `^10.14.0` / `^10.0.1` / `^8.72.1` | MIT | `strictTypeChecked` static analysis (`overrides.minimatch@^11.0.3`) |
-| `prettier` | `^3.5.3` | MIT | Deterministic code formatting |
-| `fake-indexeddb` | `^6.2.7` | Apache-2.0 | IndexedDB W3C spec test polyfill for Node unit tests |
-| `@webgpu/types` | `^0.1.74` | BSD-3-Clause | Official W3C WebGPU TypeScript definitions |
-| `@types/node` | `^22.15.0` | MIT | Node.js TypeScript definitions for test/build scripts |
+| Package                                       | Version                            | License      | Purpose                                                             |
+| --------------------------------------------- | ---------------------------------- | ------------ | ------------------------------------------------------------------- |
+| `typescript`                                  | `~5.8.3`                           | Apache-2.0   | Strict TypeScript typechecker                                       |
+| `vite`                                        | `^6.4.5`                           | MIT          | ES module dev server & production bundler                           |
+| `vitest`                                      | `^5.0.5`                           | MIT          | Unit, integration, security, and benchmark test runner              |
+| `@playwright/test`                            | `^1.64.1`                          | Apache-2.0   | End-to-end Chromium browser automation                              |
+| `@sparticuz/chromium`                         | `^153.0.0`                         | Apache-2.0   | Headless Chromium 153 binary with SwiftShader WebGPU                |
+| `eslint` / `@eslint/js` / `typescript-eslint` | `^10.14.0` / `^10.0.1` / `^8.72.1` | MIT          | `strictTypeChecked` static analysis (`overrides.minimatch@^11.0.3`) |
+| `prettier`                                    | `^3.5.3`                           | MIT          | Deterministic code formatting                                       |
+| `fake-indexeddb`                              | `^6.2.7`                           | Apache-2.0   | IndexedDB W3C spec test polyfill for Node unit tests                |
+| `@webgpu/types`                               | `^0.1.74`                          | BSD-3-Clause | Official W3C WebGPU TypeScript definitions                          |
+| `@types/node`                                 | `^22.15.0`                         | MIT          | Node.js TypeScript definitions for test/build scripts               |

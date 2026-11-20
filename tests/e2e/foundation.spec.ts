@@ -30,7 +30,7 @@ test('loads compiled Rust WASM runtime, executes RV64 guest inside Web Worker, a
     };
   };
 
-  expect(parsed.abiVersion).toBe(1);
+  expect(parsed.abiVersion).toBe(2);
   expect(parsed.workerSmoke.transportMode).toBe('worker');
   expect(parsed.workerSmoke.serialBanner).toBe('WORKER-RV64-OK');
   expect(parsed.workerSmoke.dirtyScanlineObserved).toBe(true);

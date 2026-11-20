@@ -19,3 +19,7 @@
 /Unselected files/
 *.log
 .DS_Store
+
+# Python caches from the vendored kconfig helpers
+__pycache__/
+*.pyc

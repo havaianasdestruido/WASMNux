@@ -270,7 +270,7 @@ export class AppShell {
           <div class="wnx-profile-grid">
             <button type="button" class="wnx-profile-btn" data-testid="profile-vanilla" aria-pressed="true">
               <div class="wnx-profile-title">Vanilla Linux 7.3.1</div>
-              <div class="wnx-profile-meta" data-testid="meta-vanilla">BusyBox 1.36.1 · 64 MiB ext4</div>
+              <div class="wnx-profile-meta" data-testid="meta-vanilla">BusyBox 1.37.0 · 64 MiB ext4</div>
             </button>
             <button type="button" class="wnx-profile-btn" data-testid="profile-debian" aria-pressed="false">
               <div class="wnx-profile-title">Debian 13.7 ("trixie")</div>
@@ -905,7 +905,7 @@ export class AppShell {
       this.storage.getProfileStatus('vanilla', 64 * 1024 * 1024),
       this.storage.getProfileStatus('debian', 256 * 1024 * 1024),
     ]);
-    this.vanillaMetaEl.textContent = `BusyBox 1.36.1 · Overlay ${formatBytes(vanStatus.overlayBytes)} / 64 MiB`;
+    this.vanillaMetaEl.textContent = `BusyBox 1.37.0 · Overlay ${formatBytes(vanStatus.overlayBytes)} / 64 MiB`;
     this.debianMetaEl.textContent = `Debian 13.7 · apt/dpkg · Overlay ${formatBytes(debStatus.overlayBytes)} / 256 MiB`;
   }
 

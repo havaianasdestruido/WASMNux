@@ -4,16 +4,16 @@
   "generatedBy": "node tools/hash-assets.mjs (see docs/ASSETS.md)",
   "assets": {
     "images/vmlinux-7.3.1-riscv64.Image.gz": {
-      "sha256": "30954ed52d898eb6d18b4d1cfc0f9bd50e23598a0c8a243b7947b916317fb5ba",
-      "bytes": 3314317
+      "sha256": "feedb149461d505b4dc22a230b5b5585174ce7869bb679ee574ba23d290e1516",
+      "bytes": 3495318
     },
     "images/vanilla-initramfs.cpio.gz": {
-      "sha256": "b4d4aa718ddb2d5ebcc9ffbfe4867b4ffade4dd004b096d9011a03bb13e91807",
-      "bytes": 811224
+      "sha256": "0775164a75f56050db382346b2233bc841f6c68380df140621534e7d6cac189d",
+      "bytes": 814278
     },
     "images/vanilla-disk.ext4.gz": {
-      "sha256": "3b39afba43fd7ae1b8b10dfca40ef5e735ed68e17a37f296defbe08aabc58e39",
-      "bytes": 71424
+      "sha256": "a4741cfa776b4ef1efa4726bf8b451b49e13e4c49bc2cc10b5dfe37a5ecba9fd",
+      "bytes": 71402
     },
     "images/debian-rootfs.ext4.gz": {
       "sha256": "adb1678f414eaffd45c25f49f1c5dd7c2cd9181868447f845edbcdb1ff057032",

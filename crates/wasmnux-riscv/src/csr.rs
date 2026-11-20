@@ -68,7 +68,13 @@ pub const SSTATUS_READ_MASK: u64 = SSTATUS_WRITABLE_MASK
 pub const SIE_SSIE: u64 = 1 << 1;
 pub const SIE_STIE: u64 = 1 << 5;
 pub const SIE_SEIE: u64 = 1 << 9;
+pub const SIE_MSIP: u64 = 1 << 3;
+pub const SIE_MSIE: u64 = 1 << 3;
+pub const SIE_MTIE: u64 = 1 << 7;
+pub const SIE_MEIE: u64 = 1 << 11;
 pub const S_INT_MASK: u64 = SIE_SSIE | SIE_STIE | SIE_SEIE;
+
+pub const MSTATUS_MIE: u64 = 1 << 3;
 
 /// Default MISA extension bits for `RV64IMAFDCSU`.
 pub const MISA_EXT_RV64GC: u64 = (1 << 0)  // A
@@ -80,9 +86,13 @@ pub const MISA_EXT_RV64GC: u64 = (1 << 0)  // A
     | (1 << 18) // S
     | (1 << 20); // U
 
-#[derive(Clone, Debug)]
+/// Fixed-size CSR image (`4096` CSRs of 64 bits) used by machine snapshots.
+///
+/// A `Vec` would force every saved snapshot to be boxed and copied twice; the fixed array keeps
+/// hart mirroring and snapshot/restore allocation-free and `Copy`.
+#[derive(Clone, Copy, Debug)]
 pub struct CsrSnapshot {
-    pub regs: Vec<u64>,
+    pub regs: [u64; 4096],
 }
 
 pub struct CsrFile {
@@ -277,9 +287,7 @@ impl CsrFile {
     }
 
     pub fn snapshot(&self) -> CsrSnapshot {
-        CsrSnapshot {
-            regs: self.regs.to_vec(),
-        }
+        CsrSnapshot { regs: self.regs }
     }
 
     pub fn restore(&mut self, snap: &CsrSnapshot) -> Result<(), &'static str> {

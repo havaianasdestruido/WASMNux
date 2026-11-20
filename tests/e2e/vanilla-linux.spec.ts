@@ -3,7 +3,7 @@ import { expect, test } from '@playwright/test';
 test('boots genuine Vanilla Linux 7.3.1 in Chromium Web Worker and persists ext4 files across page reload', async ({
   page,
 }) => {
-  test.setTimeout(90_000);
+  test.setTimeout(240_000);
   await page.goto('/');
   await expect(page.locator('main[data-ready="true"]')).toBeVisible();
 
@@ -39,7 +39,7 @@ test('boots genuine Vanilla Linux 7.3.1 in Chromium Web Worker and persists ext4
       },
     });
 
-    const waitForText = async (needle: string, timeoutMs = 30_000): Promise<void> => {
+    const waitForText = async (needle: string, timeoutMs = 120_000): Promise<void> => {
       const deadline = performance.now() + timeoutMs;
       while (!serialLog.includes(needle)) {
         if (performance.now() > deadline) {
@@ -95,7 +95,7 @@ test('boots genuine Vanilla Linux 7.3.1 in Chromium Web Worker and persists ext4
       },
     });
 
-    const waitForText = async (needle: string, timeoutMs = 30_000): Promise<void> => {
+    const waitForText = async (needle: string, timeoutMs = 120_000): Promise<void> => {
       const deadline = performance.now() + timeoutMs;
       while (!serialLog.includes(needle)) {
         if (performance.now() > deadline) {

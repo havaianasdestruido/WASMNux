@@ -39,10 +39,44 @@ if [ "${ACTUAL_VER}" != "${LINUX_VERSION}" ]; then
 fi
 
 echo "[build-kernel] Generating deterministic allnoconfig + ${CONFIG_FRAGMENT}..."
-make -C "${SRC_DIR}" O="${OUT_DIR}" ARCH=riscv LLVM=1 HOSTCC=gcc HOSTCXX=g++ allnoconfig
-KCONFIG_ALLCONFIG="${OUT_DIR}/.config" >/dev/null || true
-"${SRC_DIR}/scripts/kconfig/merge_config.sh" -m -O "${OUT_DIR}" "${OUT_DIR}/.config" "${CONFIG_FRAGMENT}"
-make -C "${SRC_DIR}" O="${OUT_DIR}" ARCH=riscv LLVM=1 HOSTCC=gcc HOSTCXX=g++ olddefconfig
+# `make olddefconfig` needs scripts/kconfig/conf, which is built with flex and
+# bison. Both are present on a normal distribution but not in a bare container,
+# and without them the kernel cannot even resolve .config. kconfiglib reads the
+# same Kconfig sources in pure Python and writes the same generated files, so
+# use it when flex is unavailable (or when WASMNUX_KCONFIGLIB=1 is set).
+if [ "${WASMNUX_KCONFIGLIB:-0}" = "1" ] || ! command -v flex >/dev/null 2>&1; then
+  echo "[build-kernel] flex not found: resolving ${CONFIG_FRAGMENT} with kconfiglib"
+  KCONFIG_PY="${WASMNUX_KCONFIG_PYTHON:-python3}"
+  if ! "${KCONFIG_PY}" -c 'import kconfiglib' >/dev/null 2>&1; then
+    echo "[build-kernel] ERROR: kconfiglib is required when flex is unavailable:" >&2
+    echo "[build-kernel]   python3 -m pip install --user kconfiglib   (or apt-get install flex bison bc)" >&2
+    exit 1
+  fi
+  # Everything is written under OUT_DIR. Nothing may land in SRC_DIR: an
+  # out-of-tree build refuses to run when the source tree has a .config or
+  # generated headers of its own.
+  rm -rf "${OUT_DIR}/include/config" "${OUT_DIR}/include/generated" "${OUT_DIR}/.config"
+  "${KCONFIG_PY}" "${ROOT_DIR}/scripts/gen-kconfig.py" \
+    "${SRC_DIR}" "${CONFIG_FRAGMENT}" "${OUT_DIR}"
+else
+  make -C "${SRC_DIR}" O="${OUT_DIR}" ARCH=riscv LLVM=1 HOSTCC=gcc HOSTCXX=g++ allnoconfig
+  KCONFIG_ALLCONFIG="${OUT_DIR}/.config" >/dev/null || true
+  "${SRC_DIR}/scripts/kconfig/merge_config.sh" -m -O "${OUT_DIR}" "${OUT_DIR}/.config" "${CONFIG_FRAGMENT}"
+  make -C "${SRC_DIR}" O="${OUT_DIR}" ARCH=riscv LLVM=1 HOSTCC=gcc HOSTCXX=g++ olddefconfig
+fi
+
+# include/generated/timeconst.h comes from `bc`. Substitute the same arithmetic
+# when bc is missing so prepare0 does not stop the build.
+if ! command -v bc >/dev/null 2>&1; then
+  HZ_VALUE="$(sed -n 's/^CONFIG_HZ=//p' "${OUT_DIR}/.config" | head -1)"
+  if [ -n "${HZ_VALUE}" ]; then
+    echo "[build-kernel] bc not found: generating timeconst.h for HZ=${HZ_VALUE}"
+    mkdir -p "${OUT_DIR}/include/generated"
+    "${WASMNUX_KCONFIG_PYTHON:-python3}" "${ROOT_DIR}/scripts/gen-timeconst.py" \
+      "${HZ_VALUE}" > "${OUT_DIR}/include/generated/timeconst.h"
+    touch -d 'now' "${OUT_DIR}/include/generated/timeconst.h"
+  fi
+fi
 
 # Verify mandatory hardware driver & syscall symbols in resolved .config
 REQUIRED_SYMS=(
@@ -85,6 +119,27 @@ for sym in "${REQUIRED_SYMS[@]}"; do
   fi
 done
 echo "[build-kernel] All ${#REQUIRED_SYMS[@]} mandatory Kconfig symbols verified!"
+
+# CONFIG_OF_FLATTREE adds drivers/of/empty_root.dtb.o unconditionally, which is
+# built from empty_root.dts by the host dtc. Without dtc the build dies with
+# "No rule to make target 'drivers/of/empty_root.dtb.o'". The source is a fixed
+# ten-line tree, so generate an equivalent FDT blob directly when dtc is absent.
+if ! command -v dtc >/dev/null 2>&1; then
+  EMPTY_DTB="${OUT_DIR}/drivers/of/empty_root.dtb"
+  EMPTY_DTS="${SRC_DIR}/drivers/of/empty_root.dts"
+  if [ -f "${EMPTY_DTS}" ] && [ ! -f "${EMPTY_DTB}" ]; then
+    echo "[build-kernel] dtc not found: generating drivers/of/empty_root.dtb"
+    mkdir -p "$(dirname "${EMPTY_DTB}")"
+    "${WASMNUX_KCONFIG_PYTHON:-python3}" "${ROOT_DIR}/scripts/gen-empty-root-dtb.py" "${EMPTY_DTB}"
+  fi
+fi
+
+# The linker script is generated from the Kconfig headers, but the dependency
+# is not always tracked: vmlinux.lds lingered from a build with
+# CONFIG_STRICT_KERNEL_RWX=y and kept 2 MiB SECTION_ALIGN padding in the image,
+# so every rebuild looked identical regardless of the config. Remove it whenever
+# the config is regenerated.
+rm -f "${OUT_DIR}/arch/riscv/kernel/vmlinux.lds"
 
 JOBS="$(nproc 2>/dev/null || echo 2)"
 echo "[build-kernel] Compiling Linux ${LINUX_VERSION} arch/riscv/boot/Image with ${JOBS} jobs..."

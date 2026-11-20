@@ -35,7 +35,8 @@ export class StorageValidationError extends Error {
     | 'profile_mismatch'
     | 'quota_exceeded'
     | 'oversized_bundle'
-    | 'io_interrupted';
+    | 'io_interrupted'
+    | 'profile_locked';
 
   public constructor(
     code:
@@ -45,7 +46,8 @@ export class StorageValidationError extends Error {
       | 'profile_mismatch'
       | 'quota_exceeded'
       | 'oversized_bundle'
-      | 'io_interrupted',
+      | 'io_interrupted'
+      | 'profile_locked',
     message: string,
   ) {
     super(message);

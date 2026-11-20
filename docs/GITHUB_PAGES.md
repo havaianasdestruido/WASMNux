@@ -18,9 +18,8 @@ Published site: `https://<owner>.github.io/WASMNux/` (a project sub-path).
 
 This step is intentionally manual: creating a Pages site through the REST API requires repository
 admin rights that the workflow's `GITHUB_TOKEN` does not have, so `actions/configure-pages` cannot
-enable Pages for you (it fails with `HttpError: Resource not accessible by integration`).
-3. (Optional) Add a custom domain; the app works from any path prefix or hostname without config
-   changes because all asset URLs are resolved relatively at runtime.
+enable Pages for you (it fails with `HttpError: Resource not accessible by integration`). 3. (Optional) Add a custom domain; the app works from any path prefix or hostname without config
+changes because all asset URLs are resolved relatively at runtime.
 
 > **Plan requirement:** GitHub Pages is available for public repositories on GitHub Free. Private
 > repositories require a plan that includes Pages (Pro/Team/Enterprise). The repository itself does
@@ -40,16 +39,16 @@ No repository secrets or tokens are required: the workflow uses the scoped `GITH
 
 Pipeline:
 
-| Step | Command / action | Output |
-|---|---|---|
-| Checkout | `actions/checkout@v4` | repository sources |
-| Node.js | `actions/setup-node@v4` (Node 22, npm cache) | reproducible dependency install |
-| Rust toolchain | `rustup target add wasm32-unknown-unknown` | `wasm32` target |
-| Dependencies | `npm ci` (`PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1`) | `node_modules/` |
-| Build | `npm run build` (`build-wasm.sh` + `tsc --noEmit` + `vite build`) | `dist/` (~35 MiB) |
-| Pages config | `actions/configure-pages@v5` (`enablement: true`) | Pages metadata |
-| Artifact | `actions/upload-pages-artifact@v3` (`path: dist`) | Pages tarball |
-| Deploy | `actions/deploy-pages@v4` | live site + `page_url` |
+| Step           | Command / action                                                  | Output                          |
+| -------------- | ----------------------------------------------------------------- | ------------------------------- |
+| Checkout       | `actions/checkout@v4`                                             | repository sources              |
+| Node.js        | `actions/setup-node@v4` (Node 22, npm cache)                      | reproducible dependency install |
+| Rust toolchain | `rustup target add wasm32-unknown-unknown`                        | `wasm32` target                 |
+| Dependencies   | `npm ci` (`PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1`)                   | `node_modules/`                 |
+| Build          | `npm run build` (`build-wasm.sh` + `tsc --noEmit` + `vite build`) | `dist/` (~35 MiB)               |
+| Pages config   | `actions/configure-pages@v5` (`enablement: true`)                 | Pages metadata                  |
+| Artifact       | `actions/upload-pages-artifact@v3` (`path: dist`)                 | Pages tarball                   |
+| Deploy         | `actions/deploy-pages@v4`                                         | live site + `page_url`          |
 
 `dist/` contents:
 
@@ -77,13 +76,13 @@ A GitHub Pages project site is served from `/<repository>/`, not `/`. Vite is co
 relative base `./` (`vite.config.ts`), and all runtime fetches go through
 [`src/runtime/asset-url.ts`](../src/runtime/asset-url.ts):
 
-| Consumer | Resolution |
-|---|---|
-| `index.html`, JS/CSS/Worker chunks | Vite emits `./assets/...`; no change needed |
-| WASM runtime (`public/wasm/wasmnux_wasm.wasm`) | `resolveAssetUrl('wasm/wasmnux_wasm.wasm')` |
-| Kernel / initramfs / ext4 base disks | `BootOrchestrator` resolves each profile path against the application base URL |
-| Guest `VirtIO-Net` APT mirror | `appBaseUrl` is passed with `init_vm`; `VmEngineHost` derives `{ origin, basePath }` and the bridge requests `<origin><basePath>/debian-repo/...` |
-| PWA Service Worker | `sw.js` derives shell URLs from `new URL('./', self.location.href)` and is registered inside the deployment root, so its scope is `/WASMNux/` |
+| Consumer                                       | Resolution                                                                                                                                        |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `index.html`, JS/CSS/Worker chunks             | Vite emits `./assets/...`; no change needed                                                                                                       |
+| WASM runtime (`public/wasm/wasmnux_wasm.wasm`) | `resolveAssetUrl('wasm/wasmnux_wasm.wasm')`                                                                                                       |
+| Kernel / initramfs / ext4 base disks           | `BootOrchestrator` resolves each profile path against the application base URL                                                                    |
+| Guest `VirtIO-Net` APT mirror                  | `appBaseUrl` is passed with `init_vm`; `VmEngineHost` derives `{ origin, basePath }` and the bridge requests `<origin><basePath>/debian-repo/...` |
+| PWA Service Worker                             | `sw.js` derives shell URLs from `new URL('./', self.location.href)` and is registered inside the deployment root, so its scope is `/WASMNux/`     |
 
 This keeps **same-origin** requests intact (GitHub Pages sends no CORS headers for sub-resources),
 so `apt-get update` and `apt-get install` keep working over the guest network bridge.
@@ -148,11 +147,11 @@ GitHub Pages cannot set response headers, so:
 
 ## 6. Troubleshooting
 
-| Symptom | Cause / fix |
-|---|---|
-| Workflow fails at **Configure GitHub Pages** with `Resource not accessible by integration` (HTTP 403 on `POST /repos/{owner}/{repo}/pages`) | Pages is not enabled yet. Enable **Settings -> Pages -> Source: GitHub Actions**, then re-run the workflow. The workflow token cannot create the Pages site itself. |
-| **Settings -> Pages** shows that Pages is unavailable for this repository | GitHub Pages is not included for private repositories on GitHub Free; make the repository public or use a plan that includes Pages, then set the source to **GitHub Actions**. |
-| Deployment succeeds but the site 404s | Pages source is set to "Deploy from a branch" instead of "GitHub Actions", or the deployment ran on a branch that is not allowed by the `github-pages` environment protection rules. |
-| Blank page, console 404 on `assets/index-*.js` | A custom `base` was set in `vite.config.ts`. Keep `base: './'`; the runtime resolves sub-paths itself. |
-| `apt-get update` fails with `404` on `/debian-repo/...` | The mirror is served relative to the deployment root; confirm `dist/debian-repo/` exists and that the page URL ends with `/WASMNux/`. |
-| Terminal works but shows no WebGPU badge | GitHub Pages runs over HTTPS (secure context), so `navigator.gpu` depends on the browser; Canvas 2D rendering is automatic otherwise. |
+| Symptom                                                                                                                                     | Cause / fix                                                                                                                                                                          |
+| ------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Workflow fails at **Configure GitHub Pages** with `Resource not accessible by integration` (HTTP 403 on `POST /repos/{owner}/{repo}/pages`) | Pages is not enabled yet. Enable **Settings -> Pages -> Source: GitHub Actions**, then re-run the workflow. The workflow token cannot create the Pages site itself.                  |
+| **Settings -> Pages** shows that Pages is unavailable for this repository                                                                   | GitHub Pages is not included for private repositories on GitHub Free; make the repository public or use a plan that includes Pages, then set the source to **GitHub Actions**.       |
+| Deployment succeeds but the site 404s                                                                                                       | Pages source is set to "Deploy from a branch" instead of "GitHub Actions", or the deployment ran on a branch that is not allowed by the `github-pages` environment protection rules. |
+| Blank page, console 404 on `assets/index-*.js`                                                                                              | A custom `base` was set in `vite.config.ts`. Keep `base: './'`; the runtime resolves sub-paths itself.                                                                               |
+| `apt-get update` fails with `404` on `/debian-repo/...`                                                                                     | The mirror is served relative to the deployment root; confirm `dist/debian-repo/` exists and that the page URL ends with `/WASMNux/`.                                                |
+| Terminal works but shows no WebGPU badge                                                                                                    | GitHub Pages runs over HTTPS (secure context), so `navigator.gpu` depends on the browser; Canvas 2D rendering is automatic otherwise.                                                |

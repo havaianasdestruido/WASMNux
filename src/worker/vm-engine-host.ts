@@ -66,6 +66,7 @@ export class VmEngineHost {
             profileId: cmd.profileId,
             ramMib: cmd.ramMib,
             diskMib: cmd.diskMib,
+            hartCount: cmd.hartCount ?? 1,
           });
           for (const chunk of cmd.baseChunks) {
             vm.loadBaseDiskChunk(chunk.chunkIndex, chunk.data);

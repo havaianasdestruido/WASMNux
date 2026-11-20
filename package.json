@@ -14,7 +14,8 @@
     "lint": "eslint \"src/**/*.ts\" \"tests/**/*.ts\"",
     "format": "prettier --write \"src/**/*.{ts,css}\" \"tests/**/*.ts\" \"index.html\"",
     "format:check": "prettier --check \"src/**/*.{ts,css}\" \"tests/**/*.ts\" \"index.html\"",
-    "test": "vitest run",
+    "test": "vitest run --exclude 'tests/unit/benchmarks.test.ts'",
+    "test:all": "vitest run",
     "bench": "vitest run tests/unit/benchmarks.test.ts",
     "test:e2e": "playwright test"
   },

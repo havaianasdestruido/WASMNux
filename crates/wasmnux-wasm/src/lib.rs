@@ -14,7 +14,7 @@ use wasmnux_storage::{validate_identifier, DirtyChunkRecord, SparseBlockDisk, CH
 use wasmnux_virtio::{VirtioBlkMmio, VirtioNetMmio, VirtioRngMmio};
 
 /// ABI version used by TypeScript bindings to verify compatibility at initialization.
-pub const WASMNUX_ABI_VERSION: u32 = 1;
+pub const WASMNUX_ABI_VERSION: u32 = 2;
 
 pub const VIRTIO_BLK_BASE: u64 = 0x1000_1000;
 pub const VIRTIO_NET_BASE: u64 = 0x1000_2000;
@@ -24,6 +24,10 @@ pub const MIN_GUEST_RAM_MIB: u32 = 16;
 pub const MAX_GUEST_RAM_MIB: u32 = 1024;
 pub const MIN_DISK_MIB: u32 = 1;
 pub const MAX_DISK_MIB: u32 = 2048;
+/// Default number of emulated harts when the caller does not request SMP explicitly.
+pub const DEFAULT_HART_COUNT: u32 = 1;
+/// Hard upper bound matching `wasmnux_riscv::bus::MAX_HARTS`.
+pub const MAX_HART_COUNT: u32 = 8;
 pub const MAX_IO_BUF_BYTES: usize = 256 * 1024 * 1024;
 
 const FULL_SNAP_MAGIC: [u8; 8] = *b"WNUXFULL";
@@ -103,7 +107,18 @@ static RUNTIME: Mutex<RuntimeRegistry> = Mutex::new(RuntimeRegistry::new());
 fn install_panic_hook() {
     INIT_HOOK.call_once(|| {
         std::panic::set_hook(Box::new(|info| {
-            if let Ok(mut rt) = RUNTIME.lock() {
+            // Emit the panic text in test builds. This hook replaces the default one, so without
+            // an explicit `eprintln!` a panicking test reports a bare "FAILED" with no assertion
+            // message — which is exactly how the shared-registry race below stayed undiagnosed.
+            //
+            // Gated to `cfg(test)`: on `wasm32-unknown-unknown` stderr is a stub, so the call
+            // would sink into nothing while still dragging `core::fmt` machinery into the
+            // production module.
+            #[cfg(test)]
+            eprintln!("WASM runtime panic trapped: {info}");
+            // `try_lock`, never `lock`: the common case is a panic *inside* `with_rt`, where this
+            // thread already holds RUNTIME, so a blocking lock would deadlock the hook.
+            if let Ok(mut rt) = RUNTIME.try_lock() {
                 rt.set_err(
                     WasmErrorCode::InvalidArgument,
                     format!("WASM runtime panic trapped: {info}"),
@@ -270,6 +285,7 @@ pub extern "C" fn wasmnux_vm_create(
     epoch_sec_lo: u32,
     epoch_sec_hi: u32,
     profile_id_len: usize,
+    hart_count: u32,
 ) -> u32 {
     with_rt(|rt| {
         if !(MIN_GUEST_RAM_MIB..=MAX_GUEST_RAM_MIB).contains(&ram_mib) {
@@ -285,6 +301,13 @@ pub extern "C" fn wasmnux_vm_create(
                 format!(
                     "disk capacity {disk_mib} MiB out of bounds [{MIN_DISK_MIB}, {MAX_DISK_MIB}]"
                 ),
+            );
+            return 0;
+        }
+        if !(1..=MAX_HART_COUNT).contains(&hart_count) {
+            rt.set_err(
+                WasmErrorCode::InvalidArgument,
+                format!("hart count {hart_count} out of bounds [1, {MAX_HART_COUNT}]"),
             );
             return 0;
         }
@@ -319,7 +342,8 @@ pub extern "C" fn wasmnux_vm_create(
 
         let epoch_secs = (u64::from(epoch_sec_hi) << 32) | u64::from(epoch_sec_lo);
         let base_epoch_ns = epoch_secs.saturating_mul(1_000_000_000);
-        let mut machine = RiscvMachine::new(ram_bytes, base_epoch_ns);
+        let mut machine =
+            RiscvMachine::new_with_harts(ram_bytes, base_epoch_ns, hart_count as usize);
 
         // Derive deterministic-yet-distinct VirtIO-RNG seed from epoch + profile_id
         let mut rng_seed = [0x5Au8; 16];
@@ -368,6 +392,16 @@ pub extern "C" fn wasmnux_vm_create(
         );
         rt.clear_err();
         handle
+    })
+}
+
+/// Number of emulated harts (CPUs) this VM was created with.
+#[no_mangle]
+pub extern "C" fn wasmnux_vm_hart_count(handle: u32) -> u32 {
+    with_rt(|rt| {
+        rt.vms
+            .get(&handle)
+            .map_or(0, |vm| vm.machine.hart_count() as u32)
     })
 }
 
@@ -533,8 +567,7 @@ pub extern "C" fn wasmnux_vm_hard_reset(handle: u32) -> i32 {
             // while preserving VirtIO-Blk SparseBlockDisk data across warm/cold reboots!
             vm.machine.bus.ram.as_mut_slice().fill(0);
             vm.machine.bus.clint.mtime = 0;
-            vm.machine.bus.clint.mtimecmp = u64::MAX;
-            vm.machine.bus.clint.msip = 0;
+            vm.machine.bus.clint.reset_all_harts();
             vm.machine.bus.syscon.reset_action = None;
             vm.machine.bus.plic = wasmnux_riscv::bus::PlicState::new();
             vm.machine
@@ -614,7 +647,9 @@ pub extern "C" fn wasmnux_uart_push_input(handle: u32, len: usize) -> i32 {
             .bus
             .uart
             .push_input(&bytes, &mut vm.machine.bus.plic);
-        vm.machine.hart.wfi = false;
+        for hart in vm.machine.harts.iter_mut() {
+            hart.wfi = false;
+        }
         rt.clear_err();
         0
     })
@@ -1131,7 +1166,9 @@ pub extern "C" fn wasmnux_net_complete_http_response(handle: u32, len: usize) ->
                     net.deliver_http_response(resp, ram, plic);
                 }
             });
-        vm.machine.hart.wfi = false;
+        for hart in vm.machine.harts.iter_mut() {
+            hart.wfi = false;
+        }
         rt.clear_err();
         0
     })
@@ -1166,7 +1203,8 @@ pub extern "C" fn wasmnux_vm_telemetry(handle: u32) -> usize {
             .flatten()
             .unwrap_or(0);
 
-        let mut out = [0u8; 64];
+        let hart_count = vm.machine.hart_count() as u64;
+        let mut out = [0u8; 72];
         for (idx, val) in [
             total_steps,
             mtime,
@@ -1176,6 +1214,7 @@ pub extern "C" fn wasmnux_vm_telemetry(handle: u32) -> usize {
             disk_r,
             disk_w,
             net_rx,
+            hart_count,
         ]
         .into_iter()
         .enumerate()
@@ -1193,6 +1232,29 @@ mod tests {
     use wasmnux_riscv::boot::RISCV_IMAGE_MAGIC2;
     use wasmnux_riscv::KERNEL_LOAD_OFFSET;
 
+    /// Serializes the whole test module.
+    ///
+    /// Every ABI entry point funnels through one process-global `RuntimeRegistry`, and the
+    /// input/output staging buffer (`rt.io_buf`) lives inside it. Any "stage bytes, call an
+    /// export, read the bytes back" sequence is therefore only correct if no other test
+    /// interleaves — but `cargo test` runs the tests in this module on parallel threads by
+    /// default. Without this lock the suite failed roughly one run in five with a bare
+    /// "FAILED": `read_staged` would observe a sibling test's output (e.g. `[20]` instead of the
+    /// 72-byte telemetry block) because `rt.io_buf` had been rewritten in between.
+    ///
+    /// The lock is re-entrant through the thread's own `with_rt` calls because those take the
+    /// registry mutex only for the duration of the closure, never across an export call.
+    static TEST_SERIAL: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    /// Acquire the module-wide serialization lock, recovering from poisoning so one failing test
+    /// does not cascade into "poisoned lock" failures for every other test.
+    fn serialize() -> std::sync::MutexGuard<'static, ()> {
+        match TEST_SERIAL.lock() {
+            Ok(guard) => guard,
+            Err(poisoned) => poisoned.into_inner(),
+        }
+    }
+
     fn stage_bytes(data: &[u8]) {
         let ptr = wasmnux_io_buf_resize(data.len());
         assert_ne!(ptr, 0);
@@ -1207,14 +1269,15 @@ mod tests {
 
     #[test]
     fn abi_version_is_nonzero() {
-        assert_eq!(wasmnux_abi_version(), 1);
+        assert_eq!(wasmnux_abi_version(), 2);
     }
 
     #[test]
     fn wasm_abi_lifecycle_boot_uart_snapshot_and_error_bounds() {
+        let _serial = serialize();
         // 1. Out-of-bounds RAM must fail cleanly with structured error code
         stage_bytes(b"vanilla");
-        assert_eq!(wasmnux_vm_create(4, 16, 1000, 0, 7), 0);
+        assert_eq!(wasmnux_vm_create(4, 16, 1000, 0, 7, 1), 0);
         assert_eq!(
             wasmnux_last_error_code(),
             WasmErrorCode::InvalidArgument as u32
@@ -1224,7 +1287,7 @@ mod tests {
 
         // 2. Valid VM creation, SBI putchar + SRST kernel boot, snapshot/restore, and teardown
         stage_bytes(b"vanilla");
-        let handle = wasmnux_vm_create(16, 4, 1_761_868_800, 0, 7);
+        let handle = wasmnux_vm_create(16, 4, 1_761_868_800, 0, 7, 1);
         assert_ne!(handle, 0);
 
         let mut kernel = vec![0u8; 256];
@@ -1283,11 +1346,69 @@ mod tests {
         let out_len3 = wasmnux_uart_drain_output(handle);
         assert_eq!(read_staged(out_len3), b"I");
 
-        // Telemetry check
-        assert_eq!(wasmnux_vm_telemetry(handle), 64);
+        // Telemetry check (9 x u64 words, last one = hart count)
+        assert_eq!(wasmnux_vm_telemetry(handle), 72);
+        let tele = read_staged(72);
+        assert_eq!(u64::from_le_bytes(tele[64..72].try_into().unwrap()), 1);
 
         // Clean destroy
         assert_eq!(wasmnux_vm_destroy(handle), 0);
         assert_eq!(wasmnux_vm_destroy(handle), -1);
+    }
+
+    #[test]
+    fn smp_vm_create_exposes_hart_count_and_rejects_invalid_counts() {
+        let _serial = serialize();
+        stage_bytes(b"vanilla");
+
+        // 0 and MAX+1 harts are rejected with a structured InvalidArgument error.
+        for bad in [0u32, MAX_HART_COUNT + 1] {
+            stage_bytes(b"vanilla");
+            assert_eq!(wasmnux_vm_create(16, 4, 1_761_868_800, 0, 7, bad), 0);
+            assert_eq!(
+                wasmnux_last_error_code(),
+                WasmErrorCode::InvalidArgument as u32
+            );
+        }
+
+        stage_bytes(b"vanilla");
+        let handle = wasmnux_vm_create(16, 4, 1_761_868_800, 0, 7, 4);
+        assert_ne!(handle, 0);
+        assert_eq!(wasmnux_vm_hart_count(handle), 4);
+
+        // A 4-hart VM boots the same single-hart Image and reports its hart count in telemetry.
+        let kernel = {
+            let mut k = vec![0u8; 256];
+            k[0..4].copy_from_slice(&0x0400_006Fu32.to_le_bytes());
+            k[8..16].copy_from_slice(&KERNEL_LOAD_OFFSET.to_le_bytes());
+            k[56..60].copy_from_slice(&RISCV_IMAGE_MAGIC2.to_le_bytes());
+            for (i, &w) in [
+                0x0480_0513u32, // addi a0, zero, 'H'
+                0x0010_0893,    // addi a7, zero, 1
+                0x0000_0073,    // ecall
+                0x0000_006F,    // j .
+            ]
+            .iter()
+            .enumerate()
+            {
+                let off = 64 + i * 4;
+                k[off..off + 4].copy_from_slice(&w.to_le_bytes());
+            }
+            k
+        };
+        stage_bytes(&kernel);
+        assert_eq!(wasmnux_vm_stage_kernel(handle, 256), 0);
+        stage_bytes(b"console=ttyS0");
+        assert_eq!(wasmnux_vm_boot(handle, 13), 0);
+        let _ = wasmnux_vm_step(handle, 16);
+        let out_len = wasmnux_uart_drain_output(handle);
+        assert_eq!(read_staged(out_len), b"H");
+
+        assert_eq!(wasmnux_vm_telemetry(handle), 72);
+        let tele = read_staged(72);
+        assert_eq!(u64::from_le_bytes(tele[64..72].try_into().unwrap()), 4);
+
+        assert_eq!(wasmnux_vm_destroy(handle), 0);
+        assert_eq!(wasmnux_vm_hart_count(handle), 0);
     }
 }

@@ -54,7 +54,7 @@ function pumpUntil(
   return { output, matched: false };
 }
 
-describe('Vanilla Linux 7.3.1 + BusyBox 1.36.1 Guest Verification (Phase 5)', () => {
+describe('Vanilla Linux 7.3.1 + BusyBox 1.37.0 Guest Verification (Phase 5)', () => {
   it('boots upstream Linux 7.3.1, validates all 31 mandatory BusyBox applets, /proc+/sys+/dev+/dev/fb0, net, reboot, ext4 persistence, and poweroff', async () => {
     const storage = new PersistentStorageEngine(new MemoryStorageAdapter());
     const diskCapBytes = 64 * 1024 * 1024;

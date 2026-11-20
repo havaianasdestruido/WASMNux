@@ -251,9 +251,32 @@ describe('Reproducible Performance Benchmarks (Vanilla Linux 7.3.1 & Debian 13.7
       writeFileSync(outPath, jsonOutput + '\n', 'utf8');
     }
 
-    expect(report.vanillaLinux.coldBootMedianMs).toBeLessThan(15_000);
-    expect(report.debianLinux.coldBootMedianMs).toBeLessThan(45_000);
-    expect(report.vanillaLinux.effectiveMipsMedian).toBeGreaterThan(20);
+    // These are properties of the emulator, measured on shared CI hardware. The message spells
+    // out the usual cause rather than just restating the comparison, because the failure mode is
+    // almost never a real regression: it is a neighbour process eating the runner's CPU. Run this
+    // file on its own (`npm run bench`, which is what CI does in its own step); inside the full
+    // parallel suite it was measured dropping 24.8 -> 18.5 MIPS purely from contention.
+    const contentionHint =
+      ' If this is a CI runner: verify the benchmark ran in isolation. Concurrent guest boots' +
+      ' (the Debian integration test alone pins a core for ~80 s) deprioritise this measurement.' +
+      ' See the "Performance benchmarks" step in .github/workflows/ci.yml.';
+
+    expect(
+      report.vanillaLinux.coldBootMedianMs,
+      `vanilla cold boot ${String(report.vanillaLinux.coldBootMedianMs)} ms exceeds 15,000 ms` +
+        contentionHint,
+    ).toBeLessThan(15_000);
+    expect(
+      report.debianLinux.coldBootMedianMs,
+      `debian cold boot ${String(report.debianLinux.coldBootMedianMs)} ms exceeds 45,000 ms` +
+        contentionHint,
+    ).toBeLessThan(45_000);
+    expect(
+      report.vanillaLinux.effectiveMipsMedian,
+      `vanilla throughput ${String(report.vanillaLinux.effectiveMipsMedian)} MIPS is below the` +
+        ' 20 MIPS floor' +
+        contentionHint,
+    ).toBeGreaterThan(20);
     expect(report.vanillaLinux.ext4UrandomWriteMibPerSec).toBeGreaterThan(1);
     expect(report.vanillaLinux.ext4UncachedReadMibPerSec).toBeGreaterThan(2);
   }, 180_000);
