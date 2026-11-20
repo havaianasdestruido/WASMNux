@@ -85,7 +85,7 @@ npm run test:e2e
 
 | Metric                                                              | Measured Value (`N=3` boots / snapshots, `N=5` RTT)                                    |
 | ------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| `wasmnux_wasm.wasm` release binary                                  | **317.0 KiB** (`324,631` bytes, 44 ABI exports, 0 external crates)                     |
+| `wasmnux_wasm.wasm` release binary                                  | **316.9 KiB** (`324,487` bytes, 44 ABI exports, 0 external crates)                     |
 | **Vanilla Linux `7.3.1`** cold boot to shell (median)               | **3,842.2 ms** (`[3996.7, 3842.2, 3712.1]` ms, **24.6 MIPS**, `145.1 MiB` WASM memory) |
 | **Debian `13.7` ("trixie")** cold boot to `bash` (median)           | **4,424.0 ms** (`[4424.0, 4274.0, 4434.8]` ms, **23.7 MIPS**, `344.7 MiB` WASM memory) |
 | Terminal serial round-trip latency (min / median / max)             | **1.96 ms / 4.20 ms / 20.78 ms** (`[20.78, 20.74, 2.15, 1.96, 4.20]` ms)               |

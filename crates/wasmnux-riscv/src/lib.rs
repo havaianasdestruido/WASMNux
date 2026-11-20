@@ -1246,7 +1246,10 @@ mod tests {
         vm.hart.regs[5] = 0xDEAD_BEEF;
         vm.bus.clint.mtime = 777;
         vm.bus.clint.mtimecmp[0] = 4242;
-        vm.bus.ram.write_bytes(GUEST_RAM_BASE, &[0xAA, 0xBB, 0xCC, 0xDD]).unwrap();
+        vm.bus
+            .ram
+            .write_bytes(GUEST_RAM_BASE, &[0xAA, 0xBB, 0xCC, 0xDD])
+            .unwrap();
         let snap_ram = vm.bus.ram.as_slice().to_vec();
         let primary = vm.hart.snapshot();
 
@@ -1287,11 +1290,12 @@ mod tests {
         assert_eq!(vm.harts[0].regs[5], 0xDEAD_BEEF);
         assert_eq!(vm.bus.clint.mtime, 777);
         assert_eq!(vm.bus.clint.mtimecmp[0], 4242);
-        assert_eq!(vm.bus.clint.mtimecmp[1], u64::MAX, "secondary CLINT left disarmed");
         assert_eq!(
-            &vm.bus.ram.as_slice()[..4],
-            &[0xAA, 0xBB, 0xCC, 0xDD]
+            vm.bus.clint.mtimecmp[1],
+            u64::MAX,
+            "secondary CLINT left disarmed"
         );
+        assert_eq!(&vm.bus.ram.as_slice()[..4], &[0xAA, 0xBB, 0xCC, 0xDD]);
         // Secondary hart re-parked, primary marked started.
         assert!(vm.bus.hart_halt[1]);
         assert!(vm.bus.hsm_requests[0].started);

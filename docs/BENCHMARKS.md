@@ -44,7 +44,7 @@ What `tests/unit/benchmarks.test.ts` executes in a single deterministic run:
 
 | Artifact                  | Path                                           |      Compressed / Bundled Size |        Uncompressed Size | Notes                                                                                                                               |
 | ------------------------- | ---------------------------------------------- | -----------------------------: | -----------------------: | ----------------------------------------------------------------------------------------------------------------------------------- |
-| WASM VM Runtime           | `public/wasm/wasmnux_wasm.wasm`                |    **317.0 KiB** (`324,631` B) |                317.0 KiB | Zero external Rust crate dependencies; 44 ABI exports                                                                               |
+| WASM VM Runtime           | `public/wasm/wasmnux_wasm.wasm`                |    **316.9 KiB** (`324,487` B) |                316.9 KiB | Zero external Rust crate dependencies; 44 ABI exports                                                                               |
 | Linux `7.3.1` Kernel      | `public/images/vmlinux-7.3.1-riscv64.Image.gz` |   **3.33 MiB** (`3,495,318` B) | 6.24 MiB (`6,547,296` B) | Built from source in-repo; `KERNEL_UNCOMPRESSED` (direct `j` entry), VirtIO MMIO (`blk`, `net`, `rng`), `ext4`, `SimpleFB`, `ttyS0` |
 | Vanilla Initramfs         | `public/images/vanilla-initramfs.cpio.gz`      |    **795.2 KiB** (`814,278` B) |                ~1.59 MiB | Static `riscv64-linux-musl` BusyBox `1.37.0` + `wasmnux-fbtest`                                                                     |
 | Vanilla Base `ext4` Disk  | `public/images/vanilla-disk.ext4.gz`           |      **69.7 KiB** (`71,402` B) |        64.0 MiB (sparse) | 256 KiB CoW chunked `ext4` rootfs                                                                                                   |
@@ -88,7 +88,7 @@ What `tests/unit/benchmarks.test.ts` executes in a single deterministic run:
     "v8Version": "12.4.254.21-node.56"
   },
   "artifacts": {
-    "wasmBytes": 324631,
+    "wasmBytes": 324487,
     "kernelGzipBytes": 3495318,
     "kernelRawBytes": 6547296,
     "vanillaInitrdGzipBytes": 814278,

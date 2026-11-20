@@ -107,7 +107,18 @@ static RUNTIME: Mutex<RuntimeRegistry> = Mutex::new(RuntimeRegistry::new());
 fn install_panic_hook() {
     INIT_HOOK.call_once(|| {
         std::panic::set_hook(Box::new(|info| {
-            if let Ok(mut rt) = RUNTIME.lock() {
+            // Emit the panic text in test builds. This hook replaces the default one, so without
+            // an explicit `eprintln!` a panicking test reports a bare "FAILED" with no assertion
+            // message — which is exactly how the shared-registry race below stayed undiagnosed.
+            //
+            // Gated to `cfg(test)`: on `wasm32-unknown-unknown` stderr is a stub, so the call
+            // would sink into nothing while still dragging `core::fmt` machinery into the
+            // production module.
+            #[cfg(test)]
+            eprintln!("WASM runtime panic trapped: {info}");
+            // `try_lock`, never `lock`: the common case is a panic *inside* `with_rt`, where this
+            // thread already holds RUNTIME, so a blocking lock would deadlock the hook.
+            if let Ok(mut rt) = RUNTIME.try_lock() {
                 rt.set_err(
                     WasmErrorCode::InvalidArgument,
                     format!("WASM runtime panic trapped: {info}"),
@@ -331,7 +342,8 @@ pub extern "C" fn wasmnux_vm_create(
 
         let epoch_secs = (u64::from(epoch_sec_hi) << 32) | u64::from(epoch_sec_lo);
         let base_epoch_ns = epoch_secs.saturating_mul(1_000_000_000);
-        let mut machine = RiscvMachine::new_with_harts(ram_bytes, base_epoch_ns, hart_count as usize);
+        let mut machine =
+            RiscvMachine::new_with_harts(ram_bytes, base_epoch_ns, hart_count as usize);
 
         // Derive deterministic-yet-distinct VirtIO-RNG seed from epoch + profile_id
         let mut rng_seed = [0x5Au8; 16];
@@ -1220,6 +1232,29 @@ mod tests {
     use wasmnux_riscv::boot::RISCV_IMAGE_MAGIC2;
     use wasmnux_riscv::KERNEL_LOAD_OFFSET;
 
+    /// Serializes the whole test module.
+    ///
+    /// Every ABI entry point funnels through one process-global `RuntimeRegistry`, and the
+    /// input/output staging buffer (`rt.io_buf`) lives inside it. Any "stage bytes, call an
+    /// export, read the bytes back" sequence is therefore only correct if no other test
+    /// interleaves — but `cargo test` runs the tests in this module on parallel threads by
+    /// default. Without this lock the suite failed roughly one run in five with a bare
+    /// "FAILED": `read_staged` would observe a sibling test's output (e.g. `[20]` instead of the
+    /// 72-byte telemetry block) because `rt.io_buf` had been rewritten in between.
+    ///
+    /// The lock is re-entrant through the thread's own `with_rt` calls because those take the
+    /// registry mutex only for the duration of the closure, never across an export call.
+    static TEST_SERIAL: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    /// Acquire the module-wide serialization lock, recovering from poisoning so one failing test
+    /// does not cascade into "poisoned lock" failures for every other test.
+    fn serialize() -> std::sync::MutexGuard<'static, ()> {
+        match TEST_SERIAL.lock() {
+            Ok(guard) => guard,
+            Err(poisoned) => poisoned.into_inner(),
+        }
+    }
+
     fn stage_bytes(data: &[u8]) {
         let ptr = wasmnux_io_buf_resize(data.len());
         assert_ne!(ptr, 0);
@@ -1239,6 +1274,7 @@ mod tests {
 
     #[test]
     fn wasm_abi_lifecycle_boot_uart_snapshot_and_error_bounds() {
+        let _serial = serialize();
         // 1. Out-of-bounds RAM must fail cleanly with structured error code
         stage_bytes(b"vanilla");
         assert_eq!(wasmnux_vm_create(4, 16, 1000, 0, 7, 1), 0);
@@ -1322,6 +1358,7 @@ mod tests {
 
     #[test]
     fn smp_vm_create_exposes_hart_count_and_rejects_invalid_counts() {
+        let _serial = serialize();
         stage_bytes(b"vanilla");
 
         // 0 and MAX+1 harts are rejected with a structured InvalidArgument error.
